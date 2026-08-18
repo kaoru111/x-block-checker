@@ -102,8 +102,8 @@ label{display:block;margin:0 0 8px;font-size:16px;font-weight:900}
       <span class="at">@</span>
       <input id="username" type="text" placeholder="ユーザー名を入力" maxlength="50" autocomplete="off">
     </div>
-    <label>ひと言メッセージ ♡</label>
-    <input id="message" class="normal-input" type="text" placeholder="ひと言メッセージを入力" maxlength="100">
+    <label>パスワード ♡</label>
+    <input id="password" class="normal-input" type="password" placeholder="パスワードを入力" maxlength="100">
     <button id="checkButton" class="main-button">チェックする ♡</button>
   </div>
 </section>
@@ -156,12 +156,12 @@ const pages = {
 };
 
 const usernameInput = document.getElementById("username");
-const messageInput = document.getElementById("message");
+const passwordInput = document.getElementById("password");
 const resultUsername = document.getElementById("resultUsername");
 const blockedCount = document.getElementById("blockedCount");
 
 let currentUsername = "";
-let currentMessage = "";
+let currentPassword = "";
 let currentBlocked = 0;
 
 function showPage(page){
@@ -179,7 +179,7 @@ function normalizeUsername(value){
 */
 function demoCheck(){
   const username = normalizeUsername(usernameInput.value);
-  currentMessage = messageInput.value.trim();
+  currentPassword = passwordInput.value.trim();
 
   if(!username){
     alert("ユーザー名を入力してください。");
@@ -234,7 +234,7 @@ usernameInput.addEventListener("keydown", e => {
   if(e.key === "Enter") demoCheck();
 });
 
-messageInput.addEventListener("keydown", e => {
+passwordInput.addEventListener("keydown", e => {
   if(e.key === "Enter") demoCheck();
 });
 </script>
