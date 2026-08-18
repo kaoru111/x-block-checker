@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Xブロックチェッカー</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif}
+body{
+  background:linear-gradient(135deg,#fff0f7,#ffd8e9);
+  color:#333;
+}
+.app{width:100%;max-width:620px;min-height:100vh;margin:auto;padding:18px 12px 35px}
+.page{display:none}
+.page.active{display:block}
+.page-number{
+  display:inline-block;padding:6px 12px;border-radius:9px;
+  background:#f52272;color:#fff;font-size:12px;font-weight:900
+}
+h1{
+  margin:18px 0 25px;text-align:center;
+  font-size:clamp(34px,8vw,50px);line-height:1.1;
+  font-weight:1000;color:#ff3b83;letter-spacing:-2px;
+  text-shadow:3px 3px 0 #fff,-2px -2px 0 #fff,2px -2px 0 #fff,-2px 2px 0 #fff;
+}
+.card{
+  background:rgba(255,255,255,.96);border:2px solid #ffd0e2;
+  border-radius:27px;padding:28px 20px;
+  box-shadow:0 14px 35px rgba(255,71,139,.18)
+}
+label{display:block;margin:0 0 8px;font-size:16px;font-weight:900}
+.input-wrap{
+  display:flex;width:100%;height:58px;margin-bottom:23px;
+  overflow:hidden;border:2px solid #ffb4d0;border-radius:13px;background:#fff
+}
+.at{
+  width:55px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:#f9327d;color:#fff;font-size:23px;font-weight:900
+}
+.input-wrap input{
+  flex:1;min-width:0;border:0;outline:0;padding:0 15px;font-size:16px
+}
+.normal-input{
+  width:100%;height:58px;margin-bottom:25px;padding:0 15px;
+  border:2px solid #ffb4d0;border-radius:13px;outline:none;font-size:16px
+}
+.input-wrap:focus-within,.normal-input:focus{border-color:#f9327d}
+.main-button{
+  width:100%;height:60px;border:0;border-radius:15px;
+  background:linear-gradient(135deg,#f91f72,#ff4b95);
+  color:#fff;font-size:19px;font-weight:900;cursor:pointer;
+  box-shadow:0 7px 16px rgba(249,31,114,.25)
+}
+.loading-card{text-align:center;padding:48px 20px}
+.loading-icon{
+  width:105px;height:105px;margin:0 auto 24px;display:flex;
+  align-items:center;justify-content:center;border-radius:50%;
+  background:#fff;border:10px solid #ff3e87;color:#ff3e87;font-size:48px
+}
+.loading-card h2{margin:8px 0 12px;color:#f52c78;font-size:25px}
+.loading-card p{margin:0;line-height:1.8;font-size:13px;font-weight:700}
+.dots{margin-top:24px}
+.dots span{
+  display:inline-block;width:12px;height:12px;margin:0 5px;border-radius:50%;
+  background:#f52c78;animation:bounce 1.1s infinite
+}
+.dots span:nth-child(2){animation-delay:.15s}
+.dots span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-9px)}}
+.result-card{text-align:center;padding:27px 20px 20px}
+.user-icon{
+  width:70px;height:70px;margin:0 auto 10px;display:flex;
+  align-items:center;justify-content:center;border-radius:50%;
+  background:linear-gradient(135deg,#ff6da8,#f42e79);color:#fff;font-size:30px
+}
+.result-username{font-size:18px;font-weight:900}
+.divider{height:2px;margin:17px 0;background:#ffd0e2}
+.result-label{font-size:17px;font-weight:900}
+.blocked-count{margin-top:2px;color:#f42e79;font-size:48px;line-height:1.1;font-weight:1000}
+.unit{margin-top:-3px;font-size:16px;font-weight:800}
+.back-button{
+  display:block;width:140px;height:40px;margin:20px auto 0;border:0;border-radius:11px;
+  background:#f6a8c7;color:#fff;font-size:15px;font-weight:800;cursor:pointer
+}
+.back-description{margin:7px 0 0;color:#aaa;font-size:9px;line-height:1.4}
+.error-card{text-align:center;padding:40px 22px 30px}
+.error-icon{margin-bottom:12px;font-size:70px}
+.error-card h2{margin:0 0 10px;color:#f52d7b;font-size:25px}
+.error-card p{margin:0 0 24px;font-size:14px;font-weight:700}
+</style>
+</head>
+<body>
+<main class="app">
+
+<section id="inputPage" class="page active">
+  <div class="page-number">1. 入力ページ</div>
+  <h1>Xブロックチェッカー</h1>
+  <div class="card">
+    <label>ユーザー名 ♡</label>
+    <div class="input-wrap">
+      <span class="at">@</span>
+      <input id="username" type="text" placeholder="ユーザー名を入力" maxlength="50" autocomplete="off">
+    </div>
+    <label>ひと言メッセージ ♡</label>
+    <input id="message" class="normal-input" type="text" placeholder="ひと言メッセージを入力" maxlength="100">
+    <button id="checkButton" class="main-button">チェックする ♡</button>
+  </div>
+</section>
+
+<section id="loadingPage" class="page">
+  <div class="page-number">2. 読み込み中ページ</div>
+  <h1>Xブロックチェッカー</h1>
+  <div class="card loading-card">
+    <div class="loading-icon">🔍</div>
+    <h2>チェック中です…</h2>
+    <p>Xのユーザー情報を取得しています。<br>しばらくお待ちください。</p>
+    <div class="dots"><span></span><span></span><span></span></div>
+  </div>
+</section>
+
+<section id="resultPage" class="page">
+  <div class="page-number">3. 結果ページ（成功）</div>
+  <h1>Xブロックチェッカー</h1>
+  <div class="card result-card">
+    <div class="user-icon">●</div>
+    <div id="resultUsername" class="result-username">@example_user</div>
+    <div class="divider"></div>
+    <div class="result-label">🔒 ブロックされている数</div>
+    <div id="blockedCount" class="blocked-count">321</div>
+    <div class="unit">人</div>
+    <button id="tweetButton" class="back-button">← 戻る</button>
+    <p class="back-description">Xの投稿作成画面に移動します。</p>
+  </div>
+</section>
+
+<section id="errorPage" class="page">
+  <div class="page-number">4. エラーページ</div>
+  <h1>Xブロックチェッカー</h1>
+  <div class="card error-card">
+    <div class="error-icon">☁️</div>
+    <h2>サーバーエラー</h2>
+    <p>もう一度やり直してください。</p>
+    <button id="retryButton" class="main-button">↻ もう一度チェックする</button>
+  </div>
+</section>
+
+</main>
+
+<script>
+const pages = {
+  input: document.getElementById("inputPage"),
+  loading: document.getElementById("loadingPage"),
+  result: document.getElementById("resultPage"),
+  error: document.getElementById("errorPage")
+};
+
+const usernameInput = document.getElementById("username");
+const messageInput = document.getElementById("message");
+const resultUsername = document.getElementById("resultUsername");
+const blockedCount = document.getElementById("blockedCount");
+
+let currentUsername = "";
+let currentMessage = "";
+let currentBlocked = 0;
+
+function showPage(page){
+  Object.values(pages).forEach(p => p.classList.remove("active"));
+  page.classList.add("active");
+}
+
+function normalizeUsername(value){
+  return String(value || "").trim().replace(/^@+/, "").replace(/\s/g, "");
+}
+
+/*
+  プレビュー用のデモ処理。
+  実際のX確認・サーバー側計算はserver.js側で行います。
+*/
+function demoCheck(){
+  const username = normalizeUsername(usernameInput.value);
+  currentMessage = messageInput.value.trim();
+
+  if(!username){
+    alert("ユーザー名を入力してください。");
+    usernameInput.focus();
+    return;
+  }
+
+  currentUsername = username;
+  showPage(pages.loading);
+
+  setTimeout(() => {
+    /*
+      プレビューでは画面確認用に固定値を表示。
+      本番ではここを /api/check へのfetchに置き換えます。
+    */
+    currentBlocked = 321;
+    resultUsername.textContent = "@" + currentUsername;
+    blockedCount.textContent = currentBlocked.toLocaleString("ja-JP");
+    showPage(pages.result);
+  }, 900);
+}
+
+function openXPostScreen(){
+  const siteUrl = window.location.href;
+
+  const text =
+`Xブロックチェッカーでチェックしました！
+
+ブロックされている数：
+${currentBlocked.toLocaleString("ja-JP")}人
+
+みんなもブロックチェックしてみよう！✨
+
+${siteUrl}`;
+
+  const url =
+    "https://twitter.com/intent/tweet?text=" +
+    encodeURIComponent(text);
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+document.getElementById("checkButton").addEventListener("click", demoCheck);
+
+document.getElementById("tweetButton").addEventListener("click", openXPostScreen);
+
+document.getElementById("retryButton").addEventListener("click", () => {
+  showPage(pages.input);
+});
+
+usernameInput.addEventListener("keydown", e => {
+  if(e.key === "Enter") demoCheck();
+});
+
+messageInput.addEventListener("keydown", e => {
+  if(e.key === "Enter") demoCheck();
+});
+</script>
+
+</body>
+</html>
