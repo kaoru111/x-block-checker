@@ -1,7 +1,7 @@
 const express=require("express"),crypto=require("crypto"),path=require("path");
 const app=express(),PORT=Number(process.env.PORT||3000);
 app.use(express.json({limit:"20kb"}));app.use(express.static(path.join(__dirname,"public")));
-
+app.get("/",(req,res)=>res.sendFile(path.join(__dirname,"x_block_checker_preview.html")));
 const norm=v=>String(v||"").trim().replace(/^@+/,"").replace(/\s/g,"");
 function calc(user,followers){
  const h=crypto.createHash("sha256").update(norm(user).toLowerCase(),"utf8").digest();
