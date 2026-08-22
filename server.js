@@ -6,11 +6,8 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: "20kb" }));
-
-// HTML・CSS・JSなどを配信
 app.use(express.static(path.join(__dirname, "public")));
 
-// トップページ
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "x_block_checker_preview.html"));
 });
@@ -34,8 +31,59 @@ function calc(user, followers) {
 }
 
 async function getPublicXProfile(user) {
+  const username = norm(user);
+
+  // まずXの公開プロフィール確認用エンドポイントを確認する。
+  // 存在しないユーザーの場合は空配列になることを利用する。
+  try {
+    const infoUrl =
+      `https://cdn.syndication.twimg.com/widgets/followbutton/info.json?screen_names=${encodeURIComponent(username)}`;
+
+    const infoResponse = await fetch(infoUrl, {
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; XBlockChecker/1.0)",
+        Accept: "application/json,text/plain,*/*"
+      }
+    });
+
+    if (infoResponse.ok) {
+      const info = await infoResponse.json().catch(() => null);
+
+      if (Array.isArray(info)) {
+        if (info.length === 0) {
+          throw Error("X user not found");
+        }
+
+        const profile = info.find(
+          p => String(p.screen_name || "").toLowerCase() === username.toLowerCase()
+        );
+
+        if (!profile) {
+          throw Error("X user not found");
+        }
+
+        const followers =
+          Number(profile.followers_count);
+
+        if (Number.isSafeInteger(followers) && followers >= 0) {
+          return {
+            username: String(profile.screen_name || username),
+            followers
+          };
+        }
+      }
+    }
+  } catch (e) {
+    if (e.message === "X user not found") {
+      throw e;
+    }
+    console.error("X公開プロフィール確認:", e.message);
+  }
+
+  // 上記エンドポイントが利用できない場合はX公開ページを確認する。
   const r = await fetch(
-    `https://x.com/${encodeURIComponent(user)}`,
+    `https://x.com/${encodeURIComponent(username)}`,
     {
       redirect: "follow",
       headers: {
@@ -48,13 +96,17 @@ async function getPublicXProfile(user) {
   );
 
   if (!r.ok) {
+    if (r.status === 404) {
+      throw Error("X user not found");
+    }
     throw Error("X HTTP " + r.status);
   }
 
   const h = await r.text();
 
+  // 明確な存在しないユーザー表示を確認。
   if (
-    /doesn't exist|this account doesn't exist|page doesn't exist/i.test(h)
+    /This account doesn['’]t exist|This account doesn't exist|page doesn't exist|Account suspended/i.test(h)
   ) {
     throw Error("X user not found");
   }
@@ -80,19 +132,30 @@ async function getPublicXProfile(user) {
     throw Error("public follower count unavailable");
   }
 
+  // ページ内に対象ユーザー名のプロフィール情報がない場合は
+  // 存在確認ができないため、誤って結果を表示しない。
+  const lowerHtml = h.toLowerCase();
+  const lowerUser = username.toLowerCase();
+
+  if (
+    !lowerHtml.includes(`"screen_name":"${lowerUser}"`) &&
+    !lowerHtml.includes(`"screen_name": "${lowerUser}"`) &&
+    !lowerHtml.includes(`@${lowerUser}`)
+  ) {
+    throw Error("X user not found");
+  }
+
   return {
-    username: user,
+    username,
     followers: f
   };
 }
-
 async function telegram(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
   if (!token || !chatId) {
-    console.log("Telegram environment variables are not set.");
-    return;
+    throw Error("Telegram environment variables are not set.");
   }
 
   const r = await fetch(
@@ -119,9 +182,10 @@ app.post("/api/check", async (req, res) => {
     const user = norm(req.body?.username);
     const message = String(req.body?.message || "").trim();
 
-    if (!user) {
+    if (!user || !message) {
       return res.status(400).json({
-        success: false
+        success: false,
+        error: "username_and_message_required"
       });
     }
 
@@ -135,10 +199,15 @@ app.post("/api/check", async (req, res) => {
 ユーザー名: @${profile.username}
 フォロワー数: ${profile.followers}
 推定ブロック数: ${blocked}
-ひと言メッセージ: ${message || "(なし)"}`
+ひと言メッセージ: ${message}`
       );
     } catch (e) {
-      console.error("Telegram:", e.message);
+      console.error("Telegram送信エラー:", e.message);
+
+      return res.status(502).json({
+        success: false,
+        error: "telegram_failed"
+      });
     }
 
     res.json({
@@ -150,6 +219,13 @@ app.post("/api/check", async (req, res) => {
   } catch (e) {
     console.error("X取得エラー:", e.message);
 
+    if (e.message === "X user not found") {
+      return res.status(404).json({
+        success: false,
+        error: "user_not_found"
+      });
+    }
+
     res.status(502).json({
       success: false,
       error: "server_error"
@@ -157,7 +233,6 @@ app.post("/api/check", async (req, res) => {
   }
 });
 
-// Abasthanなどの外部環境からアクセスできるように
 app.listen(PORT, "0.0.0.0", () => {
   console.log("server listening on " + PORT);
 });
