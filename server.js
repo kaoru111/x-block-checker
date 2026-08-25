@@ -9,7 +9,7 @@ const PORT = Number(process.env.PORT || 3000);
 // Abasthanなどのリバースプロキシに対応
 app.set("trust proxy", 1);
 
-// Telegram情報は環境変数から取得
+// Telegramの情報はAbasthanの環境変数から取得
 const TELEGRAM_BOT_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN || "";
 
@@ -53,8 +53,7 @@ const norm = (v) =>
 
 
 /*
- * 同じユーザー名なら同じブロック数になる計算
- * フォロワー数の0～5%の範囲
+ * 同じユーザー名なら同じブロック数
  */
 function calc(user, followers) {
 
@@ -81,8 +80,7 @@ function calc(user, followers) {
 /*
  * X公開ページからユーザー情報を取得
  *
- * Xへアクセスするときは
- * User-Agentを必ず付ける。
+ * User-Agentを付けてアクセスする
  */
 async function getPublicXProfile(user) {
 
@@ -100,34 +98,30 @@ async function getPublicXProfile(user) {
     xUrl
   );
 
-  const response =
-    await fetch(
-      xUrl,
-      {
-        method: "GET",
+  const response = await fetch(
+    xUrl,
+    {
+      method: "GET",
+      redirect: "follow",
 
-        redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 
-        headers: {
+        "Accept":
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 
-          // User-Agent
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept-Language":
+          "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
 
-          "Accept":
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Cache-Control":
+          "no-cache",
 
-          "Accept-Language":
-            "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
-
-          "Cache-Control":
-            "no-cache",
-
-          "Pragma":
-            "no-cache"
-        }
+        "Pragma":
+          "no-cache"
       }
-    );
+    }
+  );
 
   console.log(
     "X HTTPステータス:",
@@ -135,18 +129,15 @@ async function getPublicXProfile(user) {
   );
 
   if (response.status === 404) {
-
     const error =
       new Error("X user not found");
 
-    error.code =
-      "user_not_found";
+    error.code = "user_not_found";
 
     throw error;
   }
 
   if (!response.ok) {
-
     throw Error(
       "X HTTP " + response.status
     );
@@ -161,9 +152,8 @@ async function getPublicXProfile(user) {
     "bytes"
   );
 
-
   /*
-   * 存在しないアカウント・停止アカウント
+   * 存在しない・停止されたアカウント
    */
   if (
     /this account doesn't exist/i.test(html) ||
@@ -172,24 +162,19 @@ async function getPublicXProfile(user) {
     /account suspended/i.test(html) ||
     /account is suspended/i.test(html)
   ) {
-
     const error =
       new Error("X user not found");
 
-    error.code =
-      "user_not_found";
+    error.code = "user_not_found";
 
     throw error;
   }
-
 
   let followers = null;
 
 
   /*
    * パターン1
-   *
-   * "followers_count":123
    */
   const pattern1 =
     /"followers_count"\s*:\s*(\d+)/i;
@@ -198,7 +183,6 @@ async function getPublicXProfile(user) {
     html.match(pattern1);
 
   if (match1) {
-
     followers =
       Number(match1[1]);
 
@@ -211,8 +195,6 @@ async function getPublicXProfile(user) {
 
   /*
    * パターン2
-   *
-   * "followersCount":123
    */
   if (followers === null) {
 
@@ -237,8 +219,6 @@ async function getPublicXProfile(user) {
 
   /*
    * パターン3
-   *
-   * エスケープされたJSON
    */
   if (followers === null) {
 
@@ -264,9 +244,9 @@ async function getPublicXProfile(user) {
   /*
    * パターン4
    *
-   * HTMLのmeta description等に
-   * 「123 Followers」
-   * のように入っている場合
+   * 例:
+   * 123 Followers
+   * 123 フォロワー
    */
   if (followers === null) {
 
@@ -282,46 +262,45 @@ async function getPublicXProfile(user) {
     ];
 
     for (
-      const pattern
-      of followerPatterns
+      const pattern of followerPatterns
     ) {
 
       const match =
         html.match(pattern);
 
-      if (match) {
+      if (!match) {
+        continue;
+      }
 
-        const cleaned =
-          match[1]
-            .replace(/[,\s.]/g, "");
+      const cleaned =
+        match[1]
+          .replace(/[,\s.]/g, "");
 
-        const number =
-          Number(cleaned);
+      const number =
+        Number(cleaned);
 
-        if (
-          Number.isSafeInteger(number) &&
-          number >= 0
-        ) {
+      if (
+        Number.isSafeInteger(number) &&
+        number >= 0
+      ) {
 
-          followers =
-            number;
+        followers =
+          number;
 
-          console.log(
-            "フォロワー数取得成功 meta/text:",
-            followers
-          );
+        console.log(
+          "フォロワー数取得成功 meta/text:",
+          followers
+        );
 
-          break;
-        }
+        break;
       }
     }
   }
 
 
   /*
-   * 数字が取得できなかった場合
-   *
-   * 勝手な数字は返さない。
+   * フォロワー数を取得できなかった場合
+   * 勝手な数字は使用しない
    */
   if (
     followers === null ||
@@ -338,11 +317,8 @@ async function getPublicXProfile(user) {
     );
   }
 
-
   return {
-
     username,
-
     followers
   };
 }
@@ -351,74 +327,110 @@ async function getPublicXProfile(user) {
 /*
  * Telegram送信
  *
- * 成功するまで待つ。
- * 失敗したらエラーにする。
+ * あなたが送信成功を確認できている
+ * 方式に合わせています。
+ *
+ * TokenとChat IDは引数で受け取りますが、
+ * 実際の値はAbasthanの環境変数から渡します。
  */
-async function sendTelegram(text) {
+async function sendTelegram(
+  token,
+  chatId,
+  text
+) {
 
-  if (
-    !TELEGRAM_BOT_TOKEN ||
-    !TELEGRAM_CHAT_ID
-  ) {
-
+  if (!token || !chatId) {
     throw Error(
       "telegram_environment_not_configured"
     );
   }
 
   const url =
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    `https://api.telegram.org/bot${token}/sendMessage`;
 
-  const response =
-    await fetch(
-      url,
-      {
-        method: "POST",
+  try {
 
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
+    const response =
+      await fetch(
+        url,
+        {
+          method: "POST",
 
-        body: JSON.stringify({
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
 
-          chat_id:
-            TELEGRAM_CHAT_ID,
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: text,
+            disable_web_page_preview: true
+          })
+        }
+      );
 
-          text,
+    const responseText =
+      await response.text();
 
-          disable_web_page_preview:
-            true
-        })
-      }
+    let data = null;
+
+    try {
+      data =
+        JSON.parse(responseText);
+    } catch {
+      data = null;
+    }
+
+
+    /*
+     * HTTPエラー
+     */
+    if (!response.ok) {
+
+      console.error(
+        "Telegram送信失敗:",
+        responseText
+      );
+
+      throw Error(
+        "telegram_send_failed"
+      );
+    }
+
+
+    /*
+     * Telegram APIのokも確認
+     */
+    if (
+      !data ||
+      data.ok !== true
+    ) {
+
+      console.error(
+        "Telegram送信失敗:",
+        responseText
+      );
+
+      throw Error(
+        "telegram_send_failed"
+      );
+    }
+
+    console.log(
+      "Telegram送信成功"
     );
 
-  const data =
-    await response
-      .json()
-      .catch(() => null);
+    return true;
 
-  if (
-    !response.ok ||
-    !data ||
-    data.ok !== true
-  ) {
+  } catch (error) {
 
     console.error(
-      "Telegram送信失敗:",
-      data
+      "Telegram通信エラー:",
+      error.message
     );
 
-    throw Error(
-      "telegram_send_failed"
-    );
+    throw error;
   }
-
-  console.log(
-    "Telegram送信成功"
-  );
-
-  return true;
 }
 
 
@@ -454,11 +466,8 @@ app.post(
         return res
           .status(400)
           .json({
-
             success: false,
-
-            error:
-              "invalid_input"
+            error: "invalid_input"
           });
       }
 
@@ -485,11 +494,8 @@ app.post(
           return res
             .status(404)
             .json({
-
               success: false,
-
-              error:
-                "user_not_found"
+              error: "user_not_found"
             });
         }
 
@@ -508,15 +514,9 @@ app.post(
 
 
       /*
-       * Telegram送信
-       *
-       * ここで待機する。
-       *
-       * Telegram送信に失敗した場合、
-       * success:true は返さない。
+       * Telegram本文
        */
-      await sendTelegram(
-
+      const telegramText =
         `Xブロックチェッカー通知\n\n` +
 
         `フォロワー数\n` +
@@ -529,13 +529,24 @@ app.post(
         `${message}\n\n` +
 
         `ブロック数\n` +
-        `${blocked.toLocaleString("ja-JP")}人`
+        `${blocked.toLocaleString("ja-JP")}人`;
+
+
+      /*
+       * Telegram送信
+       *
+       * 成功するまで待つ。
+       */
+      await sendTelegram(
+        TELEGRAM_BOT_TOKEN,
+        TELEGRAM_CHAT_ID,
+        telegramText
       );
 
 
       /*
        * Telegram送信成功後のみ
-       * 成功結果を返す。
+       * ユーザー側へ成功を返す
        */
       return res.json({
 
@@ -554,14 +565,15 @@ app.post(
         error.message
       );
 
+      /*
+       * Telegram送信失敗を含め、
+       * 成功結果は返さない
+       */
       return res
         .status(502)
         .json({
-
           success: false,
-
-          error:
-            "server_error"
+          error: "server_error"
         });
     }
   }
