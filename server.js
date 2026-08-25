@@ -6,7 +6,10 @@ const rateLimit = require("express-rate-limit");
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
-// Telegramの情報はコードに書かず、Abasthanの環境変数から取得
+// Abasthanなどのリバースプロキシに対応
+app.set("trust proxy", 1);
+
+// Telegram情報は環境変数から取得
 const TELEGRAM_BOT_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN || "";
 
@@ -42,13 +45,19 @@ app.get("/", (req, res) => {
   );
 });
 
-const norm = v =>
+const norm = (v) =>
   String(v || "")
     .trim()
     .replace(/^@+/, "")
     .replace(/\s/g, "");
 
+
+/*
+ * 同じユーザー名なら同じブロック数になる計算
+ * フォロワー数の0～5%の範囲
+ */
 function calc(user, followers) {
+
   const h = crypto
     .createHash("sha256")
     .update(
@@ -68,103 +77,282 @@ function calc(user, followers) {
   );
 }
 
+
+/*
+ * X公開ページからユーザー情報を取得
+ *
+ * Xへアクセスするときは
+ * User-Agentを必ず付ける。
+ */
 async function getPublicXProfile(user) {
 
-  const r = await fetch(
-    `https://x.com/${encodeURIComponent(user)}`,
-    {
-      redirect: "follow",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+  const username = norm(user);
 
-        "Accept":
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-
-        "Accept-Language":
-          "ja,en-US;q=0.9,en;q=0.8"
-      }
-    }
-  );
-
-  if (r.status === 404) {
-
-    const e =
-      new Error("X user not found");
-
-    e.code =
-      "user_not_found";
-
-    throw e;
+  if (!username) {
+    throw Error("empty_username");
   }
 
-  if (!r.ok) {
+  const xUrl =
+    `https://x.com/${encodeURIComponent(username)}`;
+
+  console.log(
+    "Xプロフィール取得開始:",
+    xUrl
+  );
+
+  const response =
+    await fetch(
+      xUrl,
+      {
+        method: "GET",
+
+        redirect: "follow",
+
+        headers: {
+
+          // User-Agent
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+
+          "Accept":
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+
+          "Accept-Language":
+            "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
+
+          "Cache-Control":
+            "no-cache",
+
+          "Pragma":
+            "no-cache"
+        }
+      }
+    );
+
+  console.log(
+    "X HTTPステータス:",
+    response.status
+  );
+
+  if (response.status === 404) {
+
+    const error =
+      new Error("X user not found");
+
+    error.code =
+      "user_not_found";
+
+    throw error;
+  }
+
+  if (!response.ok) {
+
     throw Error(
-      "X HTTP " + r.status
+      "X HTTP " + response.status
     );
   }
 
-  const h =
-    await r.text();
+  const html =
+    await response.text();
 
+  console.log(
+    "Xページ取得完了:",
+    html.length,
+    "bytes"
+  );
+
+
+  /*
+   * 存在しないアカウント・停止アカウント
+   */
   if (
-    /doesn't exist|this account doesn't exist|page doesn't exist|account suspended/i.test(h)
+    /this account doesn't exist/i.test(html) ||
+    /this account doesn.t exist/i.test(html) ||
+    /page doesn.t exist/i.test(html) ||
+    /account suspended/i.test(html) ||
+    /account is suspended/i.test(html)
   ) {
 
-    const e =
+    const error =
       new Error("X user not found");
 
-    e.code =
+    error.code =
       "user_not_found";
 
-    throw e;
+    throw error;
   }
 
-  const patterns = [
-    /"followers_count"\s*:\s*(\d+)/i,
-    /"followersCount"\s*:\s*(\d+)/i,
-    /"followers_count"\s*,\s*(\d+)/i
-  ];
 
-  let f = null;
+  let followers = null;
 
-  for (const re of patterns) {
 
-    const m =
-      h.match(re);
+  /*
+   * パターン1
+   *
+   * "followers_count":123
+   */
+  const pattern1 =
+    /"followers_count"\s*:\s*(\d+)/i;
 
-    if (m) {
+  const match1 =
+    html.match(pattern1);
 
-      f =
-        Number(m[1]);
+  if (match1) {
 
-      break;
+    followers =
+      Number(match1[1]);
+
+    console.log(
+      "フォロワー数取得成功 pattern1:",
+      followers
+    );
+  }
+
+
+  /*
+   * パターン2
+   *
+   * "followersCount":123
+   */
+  if (followers === null) {
+
+    const pattern2 =
+      /"followersCount"\s*:\s*(\d+)/i;
+
+    const match2 =
+      html.match(pattern2);
+
+    if (match2) {
+
+      followers =
+        Number(match2[1]);
+
+      console.log(
+        "フォロワー数取得成功 pattern2:",
+        followers
+      );
     }
   }
 
+
+  /*
+   * パターン3
+   *
+   * エスケープされたJSON
+   */
+  if (followers === null) {
+
+    const pattern3 =
+      /followers_count\\?["']?\s*[:=]\s*(\d+)/i;
+
+    const match3 =
+      html.match(pattern3);
+
+    if (match3) {
+
+      followers =
+        Number(match3[1]);
+
+      console.log(
+        "フォロワー数取得成功 pattern3:",
+        followers
+      );
+    }
+  }
+
+
+  /*
+   * パターン4
+   *
+   * HTMLのmeta description等に
+   * 「123 Followers」
+   * のように入っている場合
+   */
+  if (followers === null) {
+
+    const followerPatterns = [
+
+      /([\d,.\s]+)\s+Followers\b/i,
+
+      /([\d,.\s]+)\s+フォロワー/i,
+
+      /Followers\s*[:：]\s*([\d,.\s]+)/i,
+
+      /フォロワー\s*[:：]\s*([\d,.\s]+)/i
+    ];
+
+    for (
+      const pattern
+      of followerPatterns
+    ) {
+
+      const match =
+        html.match(pattern);
+
+      if (match) {
+
+        const cleaned =
+          match[1]
+            .replace(/[,\s.]/g, "");
+
+        const number =
+          Number(cleaned);
+
+        if (
+          Number.isSafeInteger(number) &&
+          number >= 0
+        ) {
+
+          followers =
+            number;
+
+          console.log(
+            "フォロワー数取得成功 meta/text:",
+            followers
+          );
+
+          break;
+        }
+      }
+    }
+  }
+
+
+  /*
+   * 数字が取得できなかった場合
+   *
+   * 勝手な数字は返さない。
+   */
   if (
-    !Number.isSafeInteger(f) ||
-    f < 0
+    followers === null ||
+    !Number.isSafeInteger(followers) ||
+    followers < 0
   ) {
+
+    console.error(
+      "Xページからフォロワー数を取得できませんでした。"
+    );
 
     throw Error(
       "public follower count unavailable"
     );
   }
 
+
   return {
-    username: user,
-    followers: f
+
+    username,
+
+    followers
   };
 }
+
 
 /*
  * Telegram送信
  *
- * Telegramへの送信が成功するまで
- * 処理を待ちます。
- *
- * 送信に失敗した場合はエラーにします。
+ * 成功するまで待つ。
+ * 失敗したらエラーにする。
  */
 async function sendTelegram(text) {
 
@@ -193,6 +381,7 @@ async function sendTelegram(text) {
         },
 
         body: JSON.stringify({
+
           chat_id:
             TELEGRAM_CHAT_ID,
 
@@ -225,9 +414,17 @@ async function sendTelegram(text) {
     );
   }
 
+  console.log(
+    "Telegram送信成功"
+  );
+
   return true;
 }
 
+
+/*
+ * チェックAPI
+ */
 app.post(
   "/api/check",
   limiter,
@@ -245,6 +442,10 @@ app.post(
           req.body?.message || ""
         ).trim();
 
+
+      /*
+       * 入力チェック
+       */
       if (
         !user ||
         !message
@@ -253,12 +454,18 @@ app.post(
         return res
           .status(400)
           .json({
+
             success: false,
+
             error:
               "invalid_input"
           });
       }
 
+
+      /*
+       * Xプロフィール取得
+       */
       let profile;
 
       try {
@@ -268,36 +475,45 @@ app.post(
             user
           );
 
-      } catch (e) {
+      } catch (error) {
 
         if (
-          e.code ===
+          error.code ===
           "user_not_found"
         ) {
 
           return res
             .status(404)
             .json({
+
               success: false,
+
               error:
                 "user_not_found"
             });
         }
 
-        throw e;
+        throw error;
       }
 
+
+      /*
+       * ブロック数計算
+       */
       const blocked =
         calc(
           user,
           profile.followers
         );
 
+
       /*
-       * Telegram送信が成功するまで待つ。
+       * Telegram送信
        *
-       * 失敗した場合は成功結果を
-       * ユーザーには返しません。
+       * ここで待機する。
+       *
+       * Telegram送信に失敗した場合、
+       * success:true は返さない。
        */
       await sendTelegram(
 
@@ -316,9 +532,10 @@ app.post(
         `${blocked.toLocaleString("ja-JP")}人`
       );
 
+
       /*
-       * Telegram送信成功後だけ
-       * success:true を返します。
+       * Telegram送信成功後のみ
+       * 成功結果を返す。
        */
       return res.json({
 
@@ -330,17 +547,19 @@ app.post(
         blocked
       });
 
-    } catch (e) {
+    } catch (error) {
 
       console.error(
         "APIエラー:",
-        e.message
+        error.message
       );
 
       return res
         .status(502)
         .json({
+
           success: false,
+
           error:
             "server_error"
         });
@@ -348,6 +567,10 @@ app.post(
   }
 );
 
+
+/*
+ * サーバー起動
+ */
 app.listen(
   PORT,
   "0.0.0.0",
