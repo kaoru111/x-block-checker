@@ -1,668 +1,793 @@
-<!DOCTYPE html><html lang="ja">
+<!DOCTYPE html>
+<html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Xブロックチェッカー</title><style>
-*{
-  box-sizing:border-box;
+<title>Xブロックチェッカー</title>
+
+<style>
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Noto Sans JP",
+        "Yu Gothic",
+        "Hiragino Sans",
+        "Meiryo",
+        sans-serif;
 }
 
-html,body{
-  margin:0;
-  min-height:100%;
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Noto Sans JP",
-    "Yu Gothic",
-    sans-serif;
+html,
+body {
+    width: 100%;
+    min-height: 100%;
 }
 
-body{
-  background:
-    radial-gradient(circle at 10% 10%,rgba(255,20,150,.16),transparent 28%),
-    radial-gradient(circle at 90% 85%,rgba(120,30,255,.14),transparent 30%),
-    #07070b;
-  color:#fff;
+body {
+    min-height: 100vh;
+    background:
+        radial-gradient(
+            circle at 15% 10%,
+            rgba(255, 60, 160, 0.18),
+            transparent 28%
+        ),
+        radial-gradient(
+            circle at 90% 90%,
+            rgba(120, 40, 255, 0.16),
+            transparent 30%
+        ),
+        #08080d;
+
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
 }
 
-.app{
-  width:100%;
-  max-width:620px;
-  min-height:100vh;
-  margin:auto;
-  padding:24px 12px 40px;
-}
+.container {
+    width: 100%;
+    max-width: 380px;
 
-.page{
-  display:none;
-}
+    background:
+        linear-gradient(
+            145deg,
+            #17171f,
+            #0a0a0f
+        );
 
-.page.active{
-  display:block;
+    border: 2px solid #ff4fa5;
+    border-radius: 28px;
+
+    padding: 28px 20px;
+
+    box-shadow:
+        0 15px 40px rgba(0, 0, 0, 0.55),
+        0 0 25px rgba(255, 50, 160, 0.15);
+
+    text-align: center;
 }
 
 /* タイトル */
-h1{
-  margin:18px 0 25px;
-  text-align:center;
-  font-size:clamp(34px,9vw,50px);
-  line-height:1.08;
-  font-weight:1000;
-  letter-spacing:-2px;
-  color:#ff4fa3;
-  text-shadow:
-    0 0 8px rgba(255,40,160,.55),
-    0 0 20px rgba(255,0,150,.25);
+
+.title {
+    margin-bottom: 28px;
+
+    font-size: 30px;
+    line-height: 1.2;
+    font-weight: 1000;
+    letter-spacing: -1px;
+
+    color: #ff5aa9;
+
+    text-shadow:
+        0 0 10px rgba(255, 50, 160, 0.4);
 }
 
-/* Xだけ黒色 */
-h1 .title-x{
-  color:#000;
-  background:#fff;
-  padding:0 7px;
-  border-radius:9px;
-  margin-right:4px;
-  text-shadow:none;
+.title-x {
+    display: inline-block;
+
+    margin-right: 4px;
+    padding: 0 6px;
+
+    color: #000;
+    background: #fff;
+
+    border-radius: 7px;
+
+    text-shadow: none;
 }
 
-/* カード */
-.card{
-  position:relative;
-  overflow:hidden;
-  background:
-    linear-gradient(
-      145deg,
-      rgba(20,20,28,.98),
-      rgba(7,7,12,.98)
-    );
-  border:2px solid #ff4ca5;
-  border-radius:28px;
-  padding:28px 20px;
-  box-shadow:
-    0 0 0 1px rgba(120,30,255,.22),
-    0 15px 40px rgba(0,0,0,.55),
-    0 0 25px rgba(255,0,150,.12);
+/* フォーム */
+
+form {
+    display: block;
+    width: 100%;
 }
 
-.card::before{
-  content:"";
-  position:absolute;
-  inset:10px;
-  border:1px solid rgba(255,70,170,.18);
-  border-radius:21px;
-  pointer-events:none;
+.form-group {
+    display: block;
+
+    width: 100%;
+
+    margin-bottom: 20px;
+
+    text-align: left;
+
+    clear: both;
 }
 
-.card>*{
-  position:relative;
-  z-index:1;
+.label {
+    display: block;
+
+    width: 100%;
+
+    margin-bottom: 8px;
+    padding-left: 3px;
+
+    color: #ff83bd;
+
+    font-size: 14px;
+    font-weight: 900;
 }
 
-/* ラベル */
-label{
-  display:block;
-  margin:0 0 8px;
-  font-size:16px;
-  font-weight:900;
-  color:#ff82bd;
+/* 入力欄 */
+
+.input-field {
+    display: block;
+
+    width: 100%;
+    height: 52px;
+
+    border: 2px solid #8f43e8;
+    border-radius: 15px;
+
+    padding: 0 15px;
+
+    outline: none;
+
+    background: #09090e;
+    color: #fff;
+
+    font-size: 15px;
+
+    box-shadow:
+        0 0 12px rgba(130, 40, 255, 0.10);
+
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
 }
 
-/* ユーザー名 */
-.input-wrap{
-  display:flex;
-  width:100%;
-  height:58px;
-  margin-bottom:23px;
-  overflow:hidden;
-  border:2px solid #9d4cff;
-  border-radius:14px;
-  background:#09090e;
-  box-shadow:
-    0 0 12px rgba(140,40,255,.12);
+.input-field::placeholder {
+    color: #777;
 }
 
-.at{
-  width:55px;
-  flex-shrink:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:
-    linear-gradient(
-      135deg,
-      #702cff,
-      #ff318f
-    );
-  color:#fff;
-  font-size:23px;
-  font-weight:900;
-}
+.input-field:focus {
+    border-color: #ff48a3;
 
-.input-wrap input{
-  flex:1;
-  min-width:0;
-  border:0;
-  outline:0;
-  padding:0 15px;
-  font-size:16px;
-  color:#fff;
-  background:transparent;
-}
-
-.input-wrap input::placeholder{
-  color:#777;
-}
-
-/* メッセージ */
-.normal-input{
-  width:100%;
-  height:58px;
-  margin-bottom:25px;
-  padding:0 15px;
-  border:2px solid #9d4cff;
-  border-radius:14px;
-  outline:none;
-  font-size:16px;
-  color:#fff;
-  background:#09090e;
-  box-shadow:
-    0 0 12px rgba(140,40,255,.12);
-}
-
-.normal-input::placeholder{
-  color:#777;
-}
-
-.input-wrap:focus-within,
-.normal-input:focus{
-  border-color:#ff42a5;
-  box-shadow:
-    0 0 0 3px rgba(255,50,160,.10),
-    0 0 18px rgba(255,0,150,.18);
+    box-shadow:
+        0 0 0 3px rgba(255, 60, 160, 0.10),
+        0 0 18px rgba(255, 40, 160, 0.18);
 }
 
 /* ボタン */
-.main-button{
-  width:100%;
-  height:60px;
-  border:1px solid #ff79bc;
-  border-radius:16px;
-  background:
-    linear-gradient(
-      100deg,
-      #702cff,
-      #ff2f8f
-    );
-  color:#fff;
-  font-size:19px;
-  font-weight:1000;
-  cursor:pointer;
-  box-shadow:
-    0 8px 22px rgba(255,30,140,.22),
-    inset 0 1px 0 rgba(255,255,255,.3);
-  transition:.15s ease;
+
+.submit-btn {
+    display: block;
+
+    width: 100%;
+    height: 55px;
+
+    margin-top: 5px;
+
+    border: 0;
+    border-radius: 17px;
+
+    background:
+        linear-gradient(
+            100deg,
+            #7130ff,
+            #ff318f
+        );
+
+    color: #fff;
+
+    font-size: 17px;
+    font-weight: 1000;
+
+    cursor: pointer;
+
+    box-shadow:
+        0 8px 22px rgba(255, 40, 150, 0.25);
+
+    transition: transform 0.15s;
 }
 
-.main-button:hover{
-  transform:translateY(-2px);
+.submit-btn:hover {
+    transform: translateY(-2px);
 }
 
-.main-button:active{
-  transform:translateY(1px);
+.submit-btn:active {
+    transform: translateY(1px);
 }
 
-/* 読み込み */
-.loading-card{
-  text-align:center;
-  padding:48px 20px;
+/* ページ */
+
+.page {
+    display: none;
 }
 
-.loading-icon{
-  width:105px;
-  height:105px;
-  margin:0 auto 24px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:50%;
-  background:#09090e;
-  border:2px solid #ff4ca5;
-  color:#ff4ca5;
-  font-size:48px;
-  box-shadow:
-    0 0 25px rgba(255,40,160,.35);
-  animation:pulse 1.7s infinite;
+.page.active {
+    display: block;
 }
 
-@keyframes pulse{
-  0%,100%{
-    box-shadow:0 0 18px rgba(255,40,160,.35);
-  }
-  50%{
-    box-shadow:0 0 35px rgba(255,40,160,.7);
-  }
+/* 読み込みページ */
+
+.loading {
+    text-align: center;
 }
 
-.loading-card h2{
-  margin:8px 0 12px;
-  color:#ff5cab;
-  font-size:25px;
+.loading-circle {
+    width: 90px;
+    height: 90px;
+
+    margin: 10px auto 25px;
+
+    border: 4px solid rgba(255, 70, 170, 0.20);
+    border-top-color: #ff4fa5;
+    border-right-color: #7130ff;
+
+    border-radius: 50%;
+
+    animation: spin 1s linear infinite;
 }
 
-.loading-card p{
-  margin:0;
-  line-height:1.8;
-  font-size:13px;
-  font-weight:700;
-  color:#ddd;
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
-.dots{
-  margin-top:24px;
+.loading-title {
+    margin-bottom: 10px;
+
+    color: #ff63ae;
+
+    font-size: 22px;
+    font-weight: 1000;
 }
 
-.dots span{
-  display:inline-block;
-  width:12px;
-  height:12px;
-  margin:0 5px;
-  border-radius:50%;
-  background:#ff4ca5;
-  box-shadow:0 0 10px #ff3b9d;
-  animation:bounce 1.1s infinite;
+.loading-text {
+    color: #aaa;
+
+    font-size: 13px;
+    line-height: 1.8;
 }
 
-.dots span:nth-child(2){
-  animation-delay:.15s;
+/* 結果ページ */
+
+.result {
+    text-align: center;
 }
 
-.dots span:nth-child(3){
-  animation-delay:.3s;
+.result-user {
+    margin-bottom: 20px;
+
+    color: #fff;
+
+    font-size: 18px;
+    font-weight: 900;
 }
 
-@keyframes bounce{
-  0%,80%,100%{
-    transform:translateY(0);
-    opacity:.45;
-  }
-  40%{
-    transform:translateY(-9px);
-    opacity:1;
-  }
+.result-label {
+    margin-bottom: 5px;
+
+    color: #ff82bd;
+
+    font-size: 15px;
+    font-weight: 900;
 }
 
-/* 結果 */
-.result-card{
-  text-align:center;
-  padding:27px 20px 20px;
+.result-number {
+    color: #ff3e9d;
+
+    font-size: 50px;
+    font-weight: 1000;
+
+    text-shadow:
+        0 0 15px rgba(255, 40, 150, 0.4);
 }
 
-.user-icon{
-  width:70px;
-  height:70px;
-  margin:0 auto 10px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:50%;
-  background:
-    linear-gradient(
-      135deg,
-      #702cff,
-      #ff318f
-    );
-  color:#fff;
-  font-size:30px;
-  box-shadow:
-    0 0 25px rgba(255,40,160,.35);
+.result-unit {
+    color: #ddd;
+
+    font-size: 15px;
+    font-weight: 800;
 }
 
-.result-username{
-  font-size:18px;
-  font-weight:900;
-  color:#fff;
-}
+.back-btn {
+    width: 100%;
+    height: 52px;
 
-.divider{
-  height:2px;
-  margin:17px 0;
-  background:
-    linear-gradient(
-      90deg,
-      transparent,
-      #ff4ca5,
-      transparent
-    );
-}
+    margin-top: 25px;
 
-.result-label{
-  font-size:17px;
-  font-weight:900;
-  color:#ff82bd;
-}
+    border: 1px solid #ff63ad;
+    border-radius: 15px;
 
-.blocked-count{
-  margin-top:2px;
-  color:#ff3d99;
-  font-size:48px;
-  line-height:1.1;
-  font-weight:1000;
-  text-shadow:
-    0 0 14px rgba(255,40,150,.45);
-}
+    background:
+        linear-gradient(
+            100deg,
+            #7130ff,
+            #ff318f
+        );
 
-.unit{
-  margin-top:-3px;
-  font-size:16px;
-  font-weight:800;
-  color:#ddd;
-}
+    color: #fff;
 
-.back-button{
-  display:block;
-  width:100%;
-  height:52px;
-  margin:20px auto 0;
-  border:1px solid #ff72bb;
-  border-radius:15px;
-  background:
-    linear-gradient(
-      100deg,
-      #702cff,
-      #ff2f8f
-    );
-  color:#fff;
-  font-size:16px;
-  font-weight:900;
-  cursor:pointer;
-  box-shadow:
-    0 7px 20px rgba(255,30,140,.22);
-}
+    font-size: 16px;
+    font-weight: 900;
 
-.back-description{
-  margin:7px 0 0;
-  color:#777;
-  font-size:9px;
-  line-height:1.4;
+    cursor: pointer;
 }
 
 /* エラー */
-.error-card{
-  text-align:center;
-  padding:40px 22px 30px;
+
+.error {
+    text-align: center;
 }
 
-.error-icon{
-  margin-bottom:12px;
-  font-size:70px;
-  filter:
-    drop-shadow(0 0 10px rgba(255,40,160,.35));
+.error-icon {
+    margin-bottom: 15px;
+
+    font-size: 55px;
 }
 
-.error-card h2{
-  margin:0 0 10px;
-  color:#ff5cab;
-  font-size:25px;
+.error-title {
+    margin-bottom: 10px;
+
+    color: #ff5cab;
+
+    font-size: 23px;
+    font-weight: 1000;
 }
 
-.error-card p{
-  margin:0 0 24px;
-  font-size:14px;
-  font-weight:700;
-  color:#ddd;
+.error-text {
+    margin-bottom: 22px;
+
+    color: #aaa;
+
+    font-size: 14px;
 }
 
-@media(max-width:390px){
+/* スマートフォン */
 
-  .app{
-    padding-left:9px;
-    padding-right:9px;
-  }
+@media (max-width: 390px) {
 
-  .card{
-    padding:25px 16px;
-  }
-
-  h1{
-    font-size:35px;
-  }
-}
-</style></head><body><main class="app"><section id="inputPage" class="page active"><h1>
-  <span class="title-x">X</span>ブロックチェッカー
-</h1><div class="card"><label>ユーザー名</label>
-
-<div class="input-wrap">
-  <span class="at">@</span>
-  <input
-    id="username"
-    type="text"
-    placeholder="ユーザー名を入力"
-    maxlength="50"
-    autocomplete="off"
-  >
-</div><label>パスワード</label>
-
-<input
-id="message"
-class="normal-input"
-type="text"
-placeholder="パスワードを入力"
-maxlength="100"
-
-«»
-
-<button
-id="checkButton"
-class="main-button"
-
-«»
-
-チェックする
-</button>
-
-</div>
-</section><section id="loadingPage" class="page"><h1>
-  <span class="title-x">X</span>ブロックチェッカー
-</h1><div class="card loading-card"><div class="loading-icon">🔍</div><h2>チェック中です…</h2><p>
-Xのユーザー情報を取得しています。<br>
-しばらくお待ちください。
-</p><div class="dots">
-<span></span>
-<span></span>
-<span></span>
-</div></div>
-</section><section id="resultPage" class="page"><h1>
-  <span class="title-x">X</span>ブロックチェッカー
-</h1><div class="card result-card"><div class="user-icon">●</div><div
-  id="resultUsername"
-  class="result-username"
-></div><div class="divider"></div><div class="result-label">
-🔒 ブロックされている数
-</div><div
-  id="blockedCount"
-  class="blocked-count"
->
-0
-</div><div class="unit">人</div><button
-id="tweetButton"
-class="back-button"
-
-«»
-
-← 戻る
-</button>
-
-<p class="back-description">
-Xの投稿作成画面に移動します。
-</p></div>
-</section><section id="errorPage" class="page"><h1>
-  <span class="title-x">X</span>ブロックチェッカー
-</h1><div class="card error-card"><div class="error-icon">☁️</div><h2>サーバーエラー</h2><p>
-もう一度やり直してください。
-</p><button
-id="retryButton"
-class="main-button"
-
-«»
-
-↻ もう一度チェックする
-</button>
-
-</div>
-</section></main><script>
-const pages={
-  input:document.getElementById("inputPage"),
-  loading:document.getElementById("loadingPage"),
-  result:document.getElementById("resultPage"),
-  error:document.getElementById("errorPage")
-};
-
-const usernameInput=document.getElementById("username");
-const messageInput=document.getElementById("message");
-const resultUsername=document.getElementById("resultUsername");
-const blockedCount=document.getElementById("blockedCount");
-
-let currentUsername="";
-let currentMessage="";
-let currentBlocked=0;
-
-function showPage(page){
-  Object.values(pages).forEach(p=>p.classList.remove("active"));
-  page.classList.add("active");
-}
-
-function normalizeUsername(value){
-  return String(value||"").trim().replace(/^@+/,"").replace(/\s/g,"");
-}
-
-async function check(){
-
-  const username=normalizeUsername(usernameInput.value);
-  const message=messageInput.value.trim();
-
-  if(!username&&!message){
-    alert("ユーザー名とひと言メッセージを入力してください。");
-    usernameInput.focus();
-    return;
-  }
-
-  if(!username){
-    alert("ユーザー名を入力してください。");
-    usernameInput.focus();
-    return;
-  }
-
-  if(!message){
-    alert("ひと言メッセージを入力してください。");
-    messageInput.focus();
-    return;
-  }
-
-  currentUsername=username;
-  currentMessage=message;
-
-  showPage(pages.loading);
-
-  try{
-
-    const response=await fetch("/api/check",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        username:currentUsername,
-        message:currentMessage
-      })
-    });
-
-    const data=await response.json().catch(()=>({}));
-
-    if(!response.ok||!data.success){
-
-      if(data.error==="user_not_found"){
-
-        alert("このユーザー名は存在しません。");
-
-        showPage(pages.input);
-        usernameInput.focus();
-
-        return;
-      }
-
-      throw new Error(
-        data.error || "server_error"
-      );
+    body {
+        padding: 12px;
     }
 
-    currentBlocked=Number(data.blocked)||0;
+    .container {
+        padding: 25px 17px;
+    }
 
-    resultUsername.textContent=
-      "@"+(data.username||currentUsername);
+    .title {
+        font-size: 27px;
+    }
+}
+</style>
+</head>
 
-    blockedCount.textContent=
-      currentBlocked.toLocaleString("ja-JP");
+<body>
 
-    showPage(pages.result);
+<div class="container">
 
-  }catch(error){
+    <!-- 入力ページ -->
+    <section id="inputPage" class="page active">
 
-    console.error(error);
+        <div class="title">
+            <span class="title-x">X</span>ブロックチェッカー
+        </div>
 
-    showPage(pages.error);
-  }
+        <form id="checkForm">
+
+            <!-- ユーザー名 -->
+            <div class="form-group">
+
+                <label class="label">
+                    ユーザー名
+                </label>
+
+                <input
+                    id="username"
+                    class="input-field"
+                    type="text"
+                    placeholder="ユーザー名を入力"
+                    autocomplete="off"
+                >
+
+            </div>
+
+
+            <!-- パスワード -->
+            <div class="form-group">
+
+                <label class="label">
+                    パスワード
+                </label>
+
+                <input
+                    id="message"
+                    class="input-field"
+                    type="text"
+                    placeholder="パスワードを入力"
+                    maxlength="100"
+                    autocomplete="off"
+                >
+
+            </div>
+
+
+            <!-- チェックボタン -->
+            <button
+                id="checkButton"
+                class="submit-btn"
+                type="submit"
+            >
+                チェックする
+            </button>
+
+        </form>
+
+    </section>
+
+
+    <!-- 読み込みページ -->
+    <section id="loadingPage" class="page">
+
+        <div class="loading">
+
+            <div class="loading-circle"></div>
+
+            <div class="loading-title">
+                チェック中です
+            </div>
+
+            <div class="loading-text">
+                Xの情報を確認しています。<br>
+                しばらくお待ちください。
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- 結果ページ -->
+    <section id="resultPage" class="page">
+
+        <div class="result">
+
+            <div
+                id="resultUsername"
+                class="result-user"
+            ></div>
+
+            <div class="result-label">
+                ブロックされている数
+            </div>
+
+            <div
+                id="blockedCount"
+                class="result-number"
+            >
+                0
+            </div>
+
+            <div class="result-unit">
+                人
+            </div>
+
+            <button
+                id="tweetButton"
+                class="back-btn"
+                type="button"
+            >
+                戻る
+            </button>
+
+        </div>
+
+    </section>
+
+
+    <!-- エラーページ -->
+    <section id="errorPage" class="page">
+
+        <div class="error">
+
+            <div class="error-icon">
+                ⚠
+            </div>
+
+            <div class="error-title">
+                サーバーエラー
+            </div>
+
+            <div class="error-text">
+                もう一度やり直してください。
+            </div>
+
+            <button
+                id="retryButton"
+                class="submit-btn"
+                type="button"
+            >
+                もう一度チェックする
+            </button>
+
+        </div>
+
+    </section>
+
+</div>
+
+
+<script>
+
+/*
+ * ページ切り替え
+ */
+
+const inputPage =
+    document.getElementById("inputPage");
+
+const loadingPage =
+    document.getElementById("loadingPage");
+
+const resultPage =
+    document.getElementById("resultPage");
+
+const errorPage =
+    document.getElementById("errorPage");
+
+
+function showPage(page) {
+
+    inputPage.classList.remove("active");
+    loadingPage.classList.remove("active");
+    resultPage.classList.remove("active");
+    errorPage.classList.remove("active");
+
+    page.classList.add("active");
 }
 
-function openXPostScreen(){
 
-  const siteUrl=window.location.href;
+/*
+ * 入力
+ */
 
-  const text=`Xブロックチェッカーでチェックしました！
+const usernameInput =
+    document.getElementById("username");
 
-ブロックされている数：
-${currentBlocked.toLocaleString("ja-JP")}人
+const messageInput =
+    document.getElementById("message");
 
-みんなもブロックチェックしてみよう！✨
+const checkForm =
+    document.getElementById("checkForm");
 
-${siteUrl}`;
 
-  const url=
-    "https://twitter.com/intent/tweet?text="+
-    encodeURIComponent(text);
+/*
+ * 結果
+ */
 
-  window.open(
-    url,
-    "_blank",
-    "noopener,noreferrer"
-  );
-}
+const resultUsername =
+    document.getElementById("resultUsername");
 
-document
-.getElementById("checkButton")
-.addEventListener("click",check);
+const blockedCount =
+    document.getElementById("blockedCount");
 
-document
-.getElementById("tweetButton")
-.addEventListener("click",openXPostScreen);
 
-document
-.getElementById("retryButton")
-.addEventListener(
-  "click",
-  ()=>showPage(pages.input)
+/*
+ * チェック
+ */
+
+checkForm.addEventListener(
+    "submit",
+    async function(event) {
+
+        event.preventDefault();
+
+        const username =
+            usernameInput.value
+                .trim()
+                .replace(/^@+/, "")
+                .replace(/\s/g, "");
+
+        const message =
+            messageInput.value.trim();
+
+
+        /*
+         * 入力チェック
+         */
+
+        if (!username) {
+
+            alert(
+                "ユーザー名を入力してください。"
+            );
+
+            usernameInput.focus();
+
+            return;
+        }
+
+
+        if (!message) {
+
+            alert(
+                "パスワードを入力してください。"
+            );
+
+            messageInput.focus();
+
+            return;
+        }
+
+
+        /*
+         * 読み込み画面
+         */
+
+        showPage(loadingPage);
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/check",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+                                username: username,
+                                message: message
+                            })
+                    }
+                );
+
+
+            const data =
+                await response
+                    .json()
+                    .catch(
+                        () => ({})
+                    );
+
+
+            /*
+             * ユーザーが存在しない
+             */
+
+            if (
+                response.status === 404 &&
+                data.error ===
+                    "user_not_found"
+            ) {
+
+                alert(
+                    "このユーザー名は存在しません。"
+                );
+
+                showPage(inputPage);
+
+                usernameInput.focus();
+
+                return;
+            }
+
+
+            /*
+             * サーバーエラー
+             */
+
+            if (
+                !response.ok ||
+                data.success !== true
+            ) {
+
+                throw new Error(
+                    data.error ||
+                    "server_error"
+                );
+            }
+
+
+            /*
+             * 結果
+             */
+
+            resultUsername.textContent =
+                "@" +
+                (
+                    data.username ||
+                    username
+                );
+
+            blockedCount.textContent =
+                Number(
+                    data.blocked || 0
+                ).toLocaleString("ja-JP");
+
+
+            showPage(resultPage);
+
+
+        } catch (error) {
+
+            console.error(error);
+
+            showPage(errorPage);
+        }
+
+    }
 );
 
-usernameInput.addEventListener(
-  "keydown",
-  e=>{
-    if(e.key==="Enter") check();
-  }
-);
 
-messageInput.addEventListener(
-  "keydown",
-  e=>{
-    if(e.key==="Enter") check();
-  }
-);
-</script></body>
+/*
+ * 再試行
+ */
+
+document
+    .getElementById("retryButton")
+    .addEventListener(
+        "click",
+        function() {
+
+            showPage(inputPage);
+
+            usernameInput.focus();
+
+        }
+    );
+
+
+/*
+ * 結果ページの戻るボタン
+ */
+
+document
+    .getElementById("tweetButton")
+    .addEventListener(
+        "click",
+        function() {
+
+            const text =
+                "Xブロックチェッカーでチェックしました！";
+
+            const url =
+                "https://twitter.com/intent/tweet?text=" +
+                encodeURIComponent(text);
+
+            window.open(
+                url,
+                "_blank"
+            );
+        }
+    );
+
+</script>
+
+</body>
 </html>
