@@ -1,722 +1,816 @@
-const express = require("express");
-const crypto = require("crypto");
-const path = require("path");
-const rateLimit = require("express-rate-limit");
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Xブロックチェッカー</title>
 
-const app = express();
-const PORT = Number(process.env.PORT || 3000);
+<style>
+*{
+  box-sizing:border-box;
+  margin:0;
+  padding:0;
+}
 
-// Abasthanなどのリバースプロキシに対応
-app.set("trust proxy", 1);
+html,body{
+  min-height:100%;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Noto Sans JP",
+    "Yu Gothic",
+    sans-serif;
+}
 
-// =====================================================
-// Telegram
-// TokenだけAbasthanの環境変数から取得
-// Chat IDはTelegramから自動取得
-// =====================================================
+body{
+  min-height:100vh;
+  background:
+    radial-gradient(circle at 15% 15%,rgba(255,50,150,.18),transparent 25%),
+    radial-gradient(circle at 85% 80%,rgba(150,50,255,.16),transparent 28%),
+    linear-gradient(145deg,#09090d 0%,#11111a 48%,#09090d 100%);
+  color:#fff;
+}
 
-const TELEGRAM_BOT_TOKEN =
-  process.env.TELEGRAM_BOT_TOKEN || "";
+.app{
+  width:100%;
+  max-width:620px;
+  min-height:100vh;
+  margin:auto;
+  padding:22px 14px 40px;
+}
 
-let telegramChatId = null;
-let telegramUpdateOffset = 0;
+.page{
+  display:none;
+}
 
-// =====================================================
-// Rate Limit
-// =====================================================
+.page.active{
+  display:block;
+}
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: "rate_limit_exceeded"
+h1{
+  margin:28px 0 26px;
+  text-align:center;
+  font-size:clamp(34px,9vw,50px);
+  line-height:1.08;
+  font-weight:1000;
+  letter-spacing:-2px;
+  color:#ff4fa3;
+  text-shadow:
+    0 0 8px rgba(255,79,163,.75),
+    0 0 20px rgba(255,79,163,.4);
+}
+
+h1::before,
+h1::after{
+  content:"";
+}
+
+.card{
+  position:relative;
+  overflow:hidden;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(27,27,38,.98),
+      rgba(15,15,23,.98)
+    );
+  border:1px solid rgba(255,79,163,.55);
+  border-radius:28px;
+  padding:30px 21px;
+  box-shadow:
+    0 0 0 1px rgba(255,79,163,.08),
+    0 15px 45px rgba(0,0,0,.55),
+    0 0 35px rgba(255,0,140,.10);
+}
+
+.card::before{
+  content:"";
+  position:absolute;
+  inset:8px;
+  border:1px solid rgba(255,79,163,.16);
+  border-radius:21px;
+  pointer-events:none;
+}
+
+.card::after{
+  content:"✦  ♡  ✦";
+  position:absolute;
+  right:18px;
+  top:12px;
+  color:#ff65ad;
+  font-size:15px;
+  letter-spacing:3px;
+  opacity:.8;
+}
+
+.card>*{
+  position:relative;
+  z-index:1;
+}
+
+label{
+  display:block;
+  margin:0 0 9px;
+  font-size:15px;
+  font-weight:900;
+  color:#ff8fc3;
+}
+
+.input-wrap{
+  display:flex;
+  width:100%;
+  height:58px;
+  margin-bottom:23px;
+  overflow:hidden;
+  border:1px solid #ff5ca9;
+  border-radius:15px;
+  background:#0d0d14;
+  box-shadow:
+    0 0 12px rgba(255,50,150,.12);
+}
+
+.at{
+  width:55px;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:
+    linear-gradient(
+      135deg,
+      #ff3f9b,
+      #b52cff
+    );
+  color:#fff;
+  font-size:23px;
+  font-weight:900;
+  box-shadow:
+    inset 0 0 15px rgba(255,255,255,.12);
+}
+
+.input-wrap input{
+  flex:1;
+  min-width:0;
+  border:0;
+  outline:0;
+  padding:0 15px;
+  font-size:16px;
+  color:#fff;
+  background:transparent;
+}
+
+.input-wrap input::placeholder,
+.normal-input::placeholder{
+  color:#777584;
+}
+
+.normal-input{
+  display:block;
+  width:100%;
+  height:58px;
+  margin-bottom:25px;
+  padding:0 15px;
+  border:1px solid #ff5ca9;
+  border-radius:15px;
+  outline:none;
+  font-size:16px;
+  color:#fff;
+  background:#0d0d14;
+  box-shadow:
+    0 0 12px rgba(255,50,150,.10);
+}
+
+.input-wrap:focus-within,
+.normal-input:focus{
+  border-color:#ff3f9b;
+  box-shadow:
+    0 0 0 3px rgba(255,63,155,.12),
+    0 0 20px rgba(255,63,155,.18);
+}
+
+.main-button{
+  width:100%;
+  height:60px;
+  border:1px solid #ff73b5;
+  border-radius:17px;
+  background:
+    linear-gradient(
+      135deg,
+      #ff4f9f 0%,
+      #ff2f87 48%,
+      #b72cff 100%
+    );
+  color:#fff;
+  font-size:19px;
+  font-weight:1000;
+  cursor:pointer;
+  box-shadow:
+    0 7px 22px rgba(255,38,137,.28),
+    0 0 18px rgba(255,38,137,.18),
+    inset 0 2px 0 rgba(255,255,255,.28);
+  transition:
+    transform .15s ease,
+    box-shadow .15s ease;
+}
+
+.main-button::after{
+  content:"";
+}
+
+.main-button:hover{
+  transform:translateY(-2px);
+  box-shadow:
+    0 10px 28px rgba(255,38,137,.38),
+    0 0 25px rgba(255,38,137,.24);
+}
+
+.main-button:active{
+  transform:translateY(1px);
+}
+
+.loading-card{
+  text-align:center;
+  padding:52px 20px;
+}
+
+.loading-icon{
+  width:105px;
+  height:105px;
+  margin:0 auto 25px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+  background:
+    radial-gradient(
+      circle,
+      #20101d,
+      #0c0c13
+    );
+  border:2px solid #ff4fa3;
+  color:#ff5ca9;
+  font-size:46px;
+  box-shadow:
+    0 0 20px rgba(255,50,150,.28),
+    inset 0 0 25px rgba(255,50,150,.08);
+}
+
+.loading-card h2{
+  margin:8px 0 12px;
+  color:#ff78b6;
+  font-size:25px;
+  text-shadow:
+    0 0 10px rgba(255,80,160,.3);
+}
+
+.loading-card p{
+  margin:0;
+  line-height:1.8;
+  font-size:13px;
+  font-weight:700;
+  color:#bcb8c3;
+}
+
+.dots{
+  margin-top:25px;
+}
+
+.dots span{
+  display:inline-block;
+  width:11px;
+  height:11px;
+  margin:0 5px;
+  border-radius:50%;
+  background:#ff4fa3;
+  box-shadow:
+    0 0 10px rgba(255,79,163,.7);
+  animation:bounce 1.1s infinite;
+}
+
+.dots span:nth-child(2){
+  animation-delay:.15s;
+}
+
+.dots span:nth-child(3){
+  animation-delay:.3s;
+}
+
+@keyframes bounce{
+  0%,80%,100%{
+    transform:translateY(0);
+    opacity:.55;
   }
-});
 
-// =====================================================
-// Middleware
-// =====================================================
+  40%{
+    transform:translateY(-9px);
+    opacity:1;
+  }
+}
 
-app.use(express.json({ limit: "20kb" }));
+.result-card{
+  text-align:center;
+  padding:30px 20px 22px;
+}
 
-app.use(
-  express.static(
-    path.join(__dirname, "public")
-  )
-);
+.user-icon{
+  width:70px;
+  height:70px;
+  margin:0 auto 11px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+  background:
+    linear-gradient(
+      135deg,
+      #ff4fa3,
+      #a72cff
+    );
+  color:#fff;
+  font-size:28px;
+  box-shadow:
+    0 0 20px rgba(255,50,150,.3);
+}
 
-// =====================================================
-// トップページ
-// =====================================================
+.result-username{
+  font-size:18px;
+  font-weight:900;
+  color:#ff9bc8;
+}
 
-app.get("/", (req, res) => {
-  res.sendFile(
-    path.join(
-      __dirname,
-      "x_block_checker_preview.html"
-    )
-  );
-});
+.divider{
+  height:1px;
+  margin:18px 0;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      #ff4fa3,
+      transparent
+    );
+}
 
-// =====================================================
-// ユーザー名正規化
-// =====================================================
+.result-label{
+  font-size:17px;
+  font-weight:900;
+  color:#ddd5dc;
+}
 
-const norm = (v) =>
-  String(v || "")
+.blocked-count{
+  margin-top:5px;
+  color:#ff4fa3;
+  font-size:50px;
+  line-height:1.1;
+  font-weight:1000;
+  text-shadow:
+    0 0 15px rgba(255,79,163,.4);
+}
+
+.unit{
+  margin-top:-3px;
+  font-size:16px;
+  font-weight:800;
+  color:#c9c3ca;
+}
+
+.back-button{
+  display:block;
+  width:140px;
+  height:42px;
+  margin:21px auto 0;
+  border:1px solid #ff5ca9;
+  border-radius:13px;
+  background:#18131b;
+  color:#ff8fc3;
+  font-size:15px;
+  font-weight:800;
+  cursor:pointer;
+  box-shadow:
+    0 0 12px rgba(255,50,150,.12);
+}
+
+.back-button:hover{
+  background:#241522;
+}
+
+.back-description{
+  margin:7px 0 0;
+  color:#77737b;
+  font-size:9px;
+  line-height:1.4;
+}
+
+.error-card{
+  text-align:center;
+  padding:43px 22px 32px;
+}
+
+.error-icon{
+  margin-bottom:13px;
+  font-size:68px;
+  filter:
+    drop-shadow(
+      0 0 12px rgba(255,79,163,.25)
+    );
+}
+
+.error-card h2{
+  margin:0 0 10px;
+  color:#ff78b6;
+  font-size:25px;
+}
+
+.error-card p{
+  margin:0 0 24px;
+  font-size:14px;
+  font-weight:700;
+  color:#bbb5bd;
+}
+
+@media(max-width:390px){
+
+  .app{
+    padding-left:9px;
+    padding-right:9px;
+  }
+
+  .card{
+    padding:26px 16px;
+  }
+
+  h1{
+    font-size:35px;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<main class="app">
+
+<section id="inputPage" class="page active">
+
+<div class="page-number">1. 入力ページ</div>
+
+<h1>Xブロックチェッカー</h1>
+
+<div class="card">
+
+<label>ユーザー名 ♡</label>
+
+<div class="input-wrap">
+<span class="at">@</span>
+<input
+id="username"
+type="text"
+placeholder="ユーザー名を入力"
+maxlength="50"
+autocomplete="off">
+</div>
+
+<label>ひと言メッセージ ♡</label>
+
+<input
+id="message"
+class="normal-input"
+type="text"
+placeholder="ひと言メッセージを入力"
+maxlength="100">
+
+<button id="checkButton" class="main-button">
+チェックする ♡
+</button>
+
+</div>
+</section>
+
+
+<section id="loadingPage" class="page">
+
+<div class="page-number">2. 読み込み中ページ</div>
+
+<h1>Xブロックチェッカー</h1>
+
+<div class="card loading-card">
+
+<div class="loading-icon">🔍</div>
+
+<h2>チェック中です…</h2>
+
+<p>
+Xのユーザー情報を取得しています。<br>
+しばらくお待ちください。
+</p>
+
+<div class="dots">
+<span></span>
+<span></span>
+<span></span>
+</div>
+
+</div>
+</section>
+
+
+<section id="resultPage" class="page">
+
+<div class="page-number">3. 結果ページ（成功）</div>
+
+<h1>Xブロックチェッカー</h1>
+
+<div class="card result-card">
+
+<div class="user-icon">●</div>
+
+<div id="resultUsername" class="result-username"></div>
+
+<div class="divider"></div>
+
+<div class="result-label">
+🔒 ブロックされている数
+</div>
+
+<div id="blockedCount" class="blocked-count">
+0
+</div>
+
+<div class="unit">
+人
+</div>
+
+<button id="tweetButton" class="back-button">
+← 戻る
+</button>
+
+<p class="back-description">
+Xの投稿作成画面に移動します。
+</p>
+
+</div>
+</section>
+
+
+<section id="errorPage" class="page">
+
+<div class="page-number">4. エラーページ</div>
+
+<h1>Xブロックチェッカー</h1>
+
+<div class="card error-card">
+
+<div class="error-icon">☁️</div>
+
+<h2>サーバーエラー</h2>
+
+<p>
+もう一度やり直してください。
+</p>
+
+<button id="retryButton" class="main-button">
+↻ もう一度チェックする
+</button>
+
+</div>
+</section>
+
+</main>
+
+
+<script>
+
+const pages={
+  input:document.getElementById("inputPage"),
+  loading:document.getElementById("loadingPage"),
+  result:document.getElementById("resultPage"),
+  error:document.getElementById("errorPage")
+};
+
+const usernameInput=
+  document.getElementById("username");
+
+const messageInput=
+  document.getElementById("message");
+
+const resultUsername=
+  document.getElementById("resultUsername");
+
+const blockedCount=
+  document.getElementById("blockedCount");
+
+let currentUsername="";
+let currentBlocked=0;
+
+
+function showPage(page){
+
+  Object.values(pages).forEach(p=>{
+    p.classList.remove("active");
+  });
+
+  page.classList.add("active");
+}
+
+
+function normalizeUsername(value){
+
+  return String(value || "")
     .trim()
-    .replace(/^@+/, "")
-    .replace(/\s/g, "");
+    .replace(/^@+/,"")
+    .replace(/\s/g,"");
 
-// =====================================================
-// 同じユーザー名なら同じブロック数
-// =====================================================
-
-function calc(user, followers) {
-
-  const h = crypto
-    .createHash("sha256")
-    .update(
-      norm(user).toLowerCase(),
-      "utf8"
-    )
-    .digest();
-
-  const seed =
-    h.readUInt32BE(0) / 0xffffffff;
-
-  const max =
-    Math.floor(followers * 0.05);
-
-  return Math.floor(
-    seed * (max + 1)
-  );
 }
 
-// =====================================================
-// X公開ページ取得
-// User-Agent付き
-// =====================================================
 
-async function getPublicXProfile(user) {
+async function check(){
 
-  const username = norm(user);
+  const username=
+    normalizeUsername(usernameInput.value);
 
-  if (!username) {
-    throw Error("empty_username");
-  }
+  const message=
+    messageInput.value.trim();
 
-  const xUrl =
-    `https://x.com/${encodeURIComponent(username)}`;
 
-  console.log(
-    "Xプロフィール取得開始:",
-    xUrl
-  );
+  if(!username && !message){
 
-  const response = await fetch(
-    xUrl,
-    {
-      method: "GET",
-      redirect: "follow",
-
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-
-        "Accept":
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-
-        "Accept-Language":
-          "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
-
-        "Cache-Control":
-          "no-cache",
-
-        "Pragma":
-          "no-cache"
-      }
-    }
-  );
-
-  console.log(
-    "X HTTPステータス:",
-    response.status
-  );
-
-  if (response.status === 404) {
-
-    const error =
-      new Error("X user not found");
-
-    error.code =
-      "user_not_found";
-
-    throw error;
-  }
-
-  if (!response.ok) {
-    throw Error(
-      "X HTTP " + response.status
-    );
-  }
-
-  const html =
-    await response.text();
-
-  console.log(
-    "Xページ取得完了:",
-    html.length,
-    "bytes"
-  );
-
-  // 存在しない・停止されたアカウント
-  if (
-    /this account doesn't exist/i.test(html) ||
-    /this account doesn.t exist/i.test(html) ||
-    /page doesn.t exist/i.test(html) ||
-    /account suspended/i.test(html) ||
-    /account is suspended/i.test(html)
-  ) {
-
-    const error =
-      new Error("X user not found");
-
-    error.code =
-      "user_not_found";
-
-    throw error;
-  }
-
-  let followers = null;
-
-  // パターン1
-  const match1 =
-    html.match(
-      /"followers_count"\s*:\s*(\d+)/i
+    alert(
+      "ユーザー名とひと言メッセージを入力してください。"
     );
 
-  if (match1) {
+    usernameInput.focus();
 
-    followers =
-      Number(match1[1]);
-
-    console.log(
-      "フォロワー数取得成功 pattern1:",
-      followers
-    );
-  }
-
-  // パターン2
-  if (followers === null) {
-
-    const match2 =
-      html.match(
-        /"followersCount"\s*:\s*(\d+)/i
-      );
-
-    if (match2) {
-
-      followers =
-        Number(match2[1]);
-
-      console.log(
-        "フォロワー数取得成功 pattern2:",
-        followers
-      );
-    }
-  }
-
-  // パターン3
-  if (followers === null) {
-
-    const match3 =
-      html.match(
-        /followers_count\\?["']?\s*[:=]\s*(\d+)/i
-      );
-
-    if (match3) {
-
-      followers =
-        Number(match3[1]);
-
-      console.log(
-        "フォロワー数取得成功 pattern3:",
-        followers
-      );
-    }
-  }
-
-  // パターン4
-  if (followers === null) {
-
-    const followerPatterns = [
-
-      /([\d,.\s]+)\s+Followers\b/i,
-
-      /([\d,.\s]+)\s+フォロワー/i,
-
-      /Followers\s*[:：]\s*([\d,.\s]+)/i,
-
-      /フォロワー\s*[:：]\s*([\d,.\s]+)/i
-    ];
-
-    for (
-      const pattern of followerPatterns
-    ) {
-
-      const match =
-        html.match(pattern);
-
-      if (!match) {
-        continue;
-      }
-
-      const cleaned =
-        match[1]
-          .replace(/[,\s.]/g, "");
-
-      const number =
-        Number(cleaned);
-
-      if (
-        Number.isSafeInteger(number) &&
-        number >= 0
-      ) {
-
-        followers =
-          number;
-
-        console.log(
-          "フォロワー数取得成功 meta/text:",
-          followers
-        );
-
-        break;
-      }
-    }
-  }
-
-  // フォロワー数を取得できなかった場合
-  if (
-    followers === null ||
-    !Number.isSafeInteger(followers) ||
-    followers < 0
-  ) {
-
-    console.error(
-      "Xページからフォロワー数を取得できませんでした。"
-    );
-
-    throw Error(
-      "public follower count unavailable"
-    );
-  }
-
-  return {
-    username,
-    followers
-  };
-}
-
-// =====================================================
-// Telegram API呼び出し
-// =====================================================
-
-async function telegramApi(method, body = {}) {
-
-  if (!TELEGRAM_BOT_TOKEN) {
-    throw Error(
-      "telegram_token_not_configured"
-    );
-  }
-
-  const url =
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
-
-  const response =
-    await fetch(
-      url,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
-
-        body: JSON.stringify(body)
-      }
-    );
-
-  const text =
-    await response.text();
-
-  let data;
-
-  try {
-    data =
-      JSON.parse(text);
-  } catch {
-    throw Error(
-      "telegram_invalid_response"
-    );
-  }
-
-  if (
-    !response.ok ||
-    data.ok !== true
-  ) {
-
-    console.error(
-      "Telegram APIエラー:",
-      text
-    );
-
-    throw Error(
-      "telegram_api_error"
-    );
-  }
-
-  return data;
-}
-
-// =====================================================
-// Telegramの更新を取得
-// Botに送られたメッセージからChat IDを自動取得
-// =====================================================
-
-async function receiveTelegramUpdates() {
-
-  if (!TELEGRAM_BOT_TOKEN) {
-    console.error(
-      "TELEGRAM_BOT_TOKEN が設定されていません"
-    );
     return;
   }
 
-  try {
 
-    const data =
-      await telegramApi(
-        "getUpdates",
-        {
-          offset:
-            telegramUpdateOffset,
+  if(!username){
 
-          timeout: 1,
+    alert("ユーザー名を入力してください。");
 
-          allowed_updates: [
-            "message"
-          ]
-        }
-      );
+    usernameInput.focus();
 
-    if (
-      !Array.isArray(data.result)
-    ) {
-      return;
-    }
-
-    for (
-      const update of data.result
-    ) {
-
-      telegramUpdateOffset =
-        update.update_id + 1;
-
-      const message =
-        update.message;
-
-      if (
-        !message ||
-        !message.chat
-      ) {
-        continue;
-      }
-
-      telegramChatId =
-        message.chat.id;
-
-      console.log(
-        "Telegram Chat IDを自動取得:",
-        String(telegramChatId)
-      );
-
-      // /start や /scrape を受け取った場合
-      const text =
-        String(
-          message.text || ""
-        ).trim();
-
-      if (
-        text === "/start" ||
-        text === "/scrape"
-      ) {
-
-        try {
-
-          await telegramApi(
-            "sendMessage",
-            {
-              chat_id:
-                telegramChatId,
-
-              text:
-                "Telegramの送信先を登録しました。",
-
-              disable_web_page_preview:
-                true
-            }
-          );
-
-          console.log(
-            "Telegram登録確認メッセージ送信成功"
-          );
-
-        } catch (error) {
-
-          console.error(
-            "登録確認メッセージ送信失敗:",
-            error.message
-          );
-        }
-      }
-    }
-
-  } catch (error) {
-
-    console.error(
-      "Telegram更新取得エラー:",
-      error.message
-    );
-  }
-}
-
-// =====================================================
-// Telegram受信監視
-// =====================================================
-
-function startTelegramPolling() {
-
-  console.log(
-    "Telegram Chat ID自動取得を開始します"
-  );
-
-  const poll = async () => {
-
-    await receiveTelegramUpdates();
-
-    setTimeout(
-      poll,
-      3000
-    );
-  };
-
-  poll();
-}
-
-// =====================================================
-// Telegram送信
-// =====================================================
-
-async function sendTelegram(text) {
-
-  if (!telegramChatId) {
-
-    throw Error(
-      "telegram_chat_id_not_received"
-    );
+    return;
   }
 
-  // Telegramのメッセージ長を安全側に制限
-  const safeText =
-    String(text).slice(0, 3500);
 
-  const data =
-    await telegramApi(
-      "sendMessage",
-      {
-        chat_id:
-          telegramChatId,
+  if(!message){
 
-        text:
-          safeText,
+    alert("ひと言メッセージを入力してください。");
 
-        disable_web_page_preview:
-          true
-      }
-    );
+    messageInput.focus();
 
-  if (!data.ok) {
-    throw Error(
-      "telegram_send_failed"
-    );
+    return;
   }
 
-  console.log(
-    "Telegram送信成功"
-  );
 
-  return true;
-}
+  currentUsername=username;
 
-// =====================================================
-// Telegram状態確認
-// =====================================================
+  showPage(pages.loading);
 
-app.get(
-  "/api/telegram/status",
-  (req, res) => {
 
-    res.json({
+  try{
 
-      success: true,
+    const response=
+      await fetch("/api/check",{
 
-      tokenConfigured:
-        Boolean(
-          TELEGRAM_BOT_TOKEN
-        ),
+        method:"POST",
 
-      chatIdConfigured:
-        Boolean(
-          telegramChatId
-        )
-    });
-  }
-);
+        headers:{
+          "Content-Type":"application/json"
+        },
 
-// =====================================================
-// XチェックAPI
-// =====================================================
+        body:JSON.stringify({
 
-app.post(
-  "/api/check",
-  limiter,
-  async (req, res) => {
+          username:currentUsername,
 
-    try {
+          message:message
 
-      const user =
-        norm(
-          req.body?.username
-        );
+        })
 
-      const message =
-        String(
-          req.body?.message || ""
-        ).trim();
-
-      if (
-        !user ||
-        !message
-      ) {
-
-        return res
-          .status(400)
-          .json({
-            success: false,
-            error: "invalid_input"
-          });
-      }
-
-      // Xプロフィール取得
-      let profile;
-
-      try {
-
-        profile =
-          await getPublicXProfile(
-            user
-          );
-
-      } catch (error) {
-
-        if (
-          error.code ===
-          "user_not_found"
-        ) {
-
-          return res
-            .status(404)
-            .json({
-              success: false,
-              error: "user_not_found"
-            });
-        }
-
-        throw error;
-      }
-
-      // ブロック数計算
-      const blocked =
-        calc(
-          user,
-          profile.followers
-        );
-
-      // Telegram本文
-      const telegramText =
-        `Xブロックチェッカー通知\n\n` +
-        `フォロワー数\n` +
-        `${profile.followers.toLocaleString("ja-JP")}名\n` +
-        `ユーザー名\n` +
-        `@${profile.username}\n` +
-        `ひと言メッセージ\n` +
-        `${message}\n\n` +
-        `ブロック数\n` +
-        `${blocked.toLocaleString("ja-JP")}人`;
-
-      // Telegram送信成功を待つ
-      await sendTelegram(
-        telegramText
-      );
-
-      // Telegram成功後だけ結果を返す
-      return res.json({
-
-        success: true,
-
-        username:
-          profile.username,
-
-        blocked
       });
 
-    } catch (error) {
 
-      console.error(
-        "APIエラー:",
-        error.message
+    const data=
+      await response.json().catch(()=>({}));
+
+
+    if(!response.ok || !data.success){
+
+      if(data.error==="user_not_found"){
+
+        alert(
+          "このユーザー名は存在しません。"
+        );
+
+        showPage(pages.input);
+
+        usernameInput.focus();
+
+        return;
+      }
+
+
+      throw new Error(
+        data.error || "server_error"
       );
 
-      return res
-        .status(502)
-        .json({
-          success: false,
-          error: "server_error"
-        });
+    }
+
+
+    currentBlocked=
+      Number(data.blocked) || 0;
+
+
+    resultUsername.textContent=
+      "@" + (data.username || currentUsername);
+
+
+    blockedCount.textContent=
+      currentBlocked.toLocaleString("ja-JP");
+
+
+    showPage(pages.result);
+
+
+  }catch(error){
+
+    console.error(error);
+
+    showPage(pages.error);
+
+  }
+
+}
+
+
+function openXPostScreen(){
+
+  const text=
+`Xブロックチェッカーでチェックしました！
+
+ブロックされている数：
+${currentBlocked.toLocaleString("ja-JP")}人
+
+みんなもブロックチェックしてみよう！✨
+
+${window.location.href}`;
+
+
+  const url=
+    "https://twitter.com/intent/tweet?text="
+    + encodeURIComponent(text);
+
+
+  window.open(
+    url,
+    "_blank",
+    "noopener,noreferrer"
+  );
+
+}
+
+
+document
+  .getElementById("checkButton")
+  .addEventListener("click",check);
+
+
+document
+  .getElementById("tweetButton")
+  .addEventListener(
+    "click",
+    openXPostScreen
+  );
+
+
+document
+  .getElementById("retryButton")
+  .addEventListener(
+    "click",
+    ()=>showPage(pages.input)
+  );
+
+
+usernameInput.addEventListener(
+  "keydown",
+  e=>{
+    if(e.key==="Enter"){
+      check();
     }
   }
 );
 
-// =====================================================
-// サーバー起動
-// =====================================================
 
-app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-
-    console.log(
-      "server listening on port " +
-      PORT
-    );
-
-    startTelegramPolling();
+messageInput.addEventListener(
+  "keydown",
+  e=>{
+    if(e.key==="Enter"){
+      check();
+    }
   }
 );
+
+</script>
+
+</body>
+</html>
