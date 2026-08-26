@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -7,20 +6,29 @@
 <title>Xブロックチェッカー</title>
 
 <style>
-*{box-sizing:border-box}
+*{
+  box-sizing:border-box;
+  margin:0;
+  padding:0;
+}
 
 html,body{
-  margin:0;
   min-height:100%;
-  font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP","Yu Gothic",sans-serif
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Noto Sans JP",
+    "Yu Gothic",
+    sans-serif;
 }
 
 body{
+  min-height:100vh;
   background:
-    radial-gradient(circle at 12% 12%,rgba(255,255,255,.95) 0 4%,transparent 4.5%),
-    radial-gradient(circle at 90% 18%,rgba(255,255,255,.9) 0 3%,transparent 3.5%),
-    linear-gradient(135deg,#fff8fb 0%,#ffe5ef 52%,#fff5f9 100%);
-  color:#8d3b59;
+    radial-gradient(circle at 15% 15%,rgba(255,50,150,.18),transparent 25%),
+    radial-gradient(circle at 85% 80%,rgba(150,50,255,.16),transparent 28%),
+    linear-gradient(145deg,#09090d 0%,#11111a 48%,#09090d 100%);
+  color:#fff;
 }
 
 .app{
@@ -28,86 +36,84 @@ body{
   max-width:620px;
   min-height:100vh;
   margin:auto;
-  padding:16px 12px 35px
+  padding:22px 14px 40px;
 }
 
-.page{display:none}
-.page.active{display:block}
+.page{
+  display:none;
+}
 
-.page-number{
-  display:inline-block;
-  padding:7px 14px;
-  border-radius:999px;
-  background:linear-gradient(135deg,#ff8eb8,#f86b9e);
-  color:#fff;
-  font-size:12px;
-  font-weight:900;
-  box-shadow:0 4px 12px rgba(248,107,158,.2)
+.page.active{
+  display:block;
 }
 
 h1{
-  margin:16px 0 20px;
+  margin:28px 0 26px;
   text-align:center;
   font-size:clamp(34px,9vw,50px);
   line-height:1.08;
   font-weight:1000;
-  color:#ff709f;
   letter-spacing:-2px;
+  color:#ff4fa3;
   text-shadow:
-    3px 3px 0 #fff,
-    -2px -2px 0 #fff,
-    2px -2px 0 #fff,
-    -2px 2px 0 #fff;
+    0 0 8px rgba(255,79,163,.75),
+    0 0 20px rgba(255,79,163,.4);
 }
 
-h1::before{content:"♡  "}
-h1::after{content:"  ♡"}
+h1::before,
+h1::after{
+  content:"";
+}
 
 .card{
   position:relative;
   overflow:hidden;
-  background:rgba(255,250,252,.95);
-  border:3px solid #ffc9dc;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(27,27,38,.98),
+      rgba(15,15,23,.98)
+    );
+  border:1px solid rgba(255,79,163,.55);
   border-radius:28px;
-  padding:28px 20px;
-  box-shadow:0 15px 35px rgba(240,103,151,.16)
+  padding:30px 21px;
+  box-shadow:
+    0 0 0 1px rgba(255,79,163,.08),
+    0 15px 45px rgba(0,0,0,.55),
+    0 0 35px rgba(255,0,140,.10);
 }
 
 .card::before{
   content:"";
   position:absolute;
-  inset:9px;
-  border:2px solid #ffd7e5;
+  inset:8px;
+  border:1px solid rgba(255,79,163,.16);
   border-radius:21px;
   pointer-events:none;
-  background:repeating-linear-gradient(
-    90deg,
-    transparent 0 9px,
-    rgba(255,185,210,.18) 9px 10px
-  )
+}
+
+.card::after{
+  content:"✦  ♡  ✦";
+  position:absolute;
+  right:18px;
+  top:12px;
+  color:#ff65ad;
+  font-size:15px;
+  letter-spacing:3px;
+  opacity:.8;
 }
 
 .card>*{
   position:relative;
-  z-index:1
-}
-
-.card::after{
-  content:"🎀   ♡   ✦";
-  position:absolute;
-  right:16px;
-  top:9px;
-  color:#ff9fbe;
-  font-size:17px;
-  letter-spacing:3px;
+  z-index:1;
 }
 
 label{
   display:block;
-  margin:0 0 8px;
-  font-size:16px;
+  margin:0 0 9px;
+  font-size:15px;
   font-weight:900;
-  color:#c84a75
+  color:#ff8fc3;
 }
 
 .input-wrap{
@@ -116,10 +122,11 @@ label{
   height:58px;
   margin-bottom:23px;
   overflow:hidden;
-  border:2px solid #ffb8d0;
-  border-radius:14px;
-  background:#fff;
-  box-shadow:0 2px 7px rgba(255,133,174,.08)
+  border:1px solid #ff5ca9;
+  border-radius:15px;
+  background:#0d0d14;
+  box-shadow:
+    0 0 12px rgba(255,50,150,.12);
 }
 
 .at{
@@ -128,10 +135,17 @@ label{
   display:flex;
   align-items:center;
   justify-content:center;
-  background:linear-gradient(135deg,#ff9bbd,#f878a2);
+  background:
+    linear-gradient(
+      135deg,
+      #ff3f9b,
+      #b52cff
+    );
   color:#fff;
   font-size:23px;
-  font-weight:900
+  font-weight:900;
+  box-shadow:
+    inset 0 0 15px rgba(255,255,255,.12);
 }
 
 .input-wrap input{
@@ -141,217 +155,294 @@ label{
   outline:0;
   padding:0 15px;
   font-size:16px;
-  color:#8d3b59
+  color:#fff;
+  background:transparent;
+}
+
+.input-wrap input::placeholder,
+.normal-input::placeholder{
+  color:#777584;
 }
 
 .normal-input{
+  display:block;
   width:100%;
   height:58px;
   margin-bottom:25px;
   padding:0 15px;
-  border:2px solid #ffb8d0;
-  border-radius:14px;
+  border:1px solid #ff5ca9;
+  border-radius:15px;
   outline:none;
   font-size:16px;
-  color:#8d3b59;
-  background:#fff
+  color:#fff;
+  background:#0d0d14;
+  box-shadow:
+    0 0 12px rgba(255,50,150,.10);
 }
 
 .input-wrap:focus-within,
 .normal-input:focus{
-  border-color:#f878a2;
-  box-shadow:0 0 0 4px rgba(255,142,184,.12)
+  border-color:#ff3f9b;
+  box-shadow:
+    0 0 0 3px rgba(255,63,155,.12),
+    0 0 20px rgba(255,63,155,.18);
 }
 
 .main-button{
   width:100%;
   height:60px;
-  border:2px solid #ffadc9;
-  border-radius:16px;
-  background:linear-gradient(135deg,#ff829f,#ff6f99);
+  border:1px solid #ff73b5;
+  border-radius:17px;
+  background:
+    linear-gradient(
+      135deg,
+      #ff4f9f 0%,
+      #ff2f87 48%,
+      #b72cff 100%
+    );
   color:#fff;
   font-size:19px;
   font-weight:1000;
   cursor:pointer;
   box-shadow:
-    0 7px 16px rgba(255,111,153,.22),
-    inset 0 2px 0 rgba(255,255,255,.4)
+    0 7px 22px rgba(255,38,137,.28),
+    0 0 18px rgba(255,38,137,.18),
+    inset 0 2px 0 rgba(255,255,255,.28);
+  transition:
+    transform .15s ease,
+    box-shadow .15s ease;
 }
 
 .main-button::after{
-  content:"  ♡"
+  content:"";
+}
+
+.main-button:hover{
+  transform:translateY(-2px);
+  box-shadow:
+    0 10px 28px rgba(255,38,137,.38),
+    0 0 25px rgba(255,38,137,.24);
+}
+
+.main-button:active{
+  transform:translateY(1px);
 }
 
 .loading-card{
   text-align:center;
-  padding:48px 20px
+  padding:52px 20px;
 }
 
 .loading-icon{
   width:105px;
   height:105px;
-  margin:0 auto 24px;
+  margin:0 auto 25px;
   display:flex;
   align-items:center;
   justify-content:center;
   border-radius:50%;
-  background:#fff;
-  border:10px solid #ff86ab;
-  color:#ff86ab;
-  font-size:48px;
-  box-shadow:0 8px 20px rgba(255,134,171,.14)
+  background:
+    radial-gradient(
+      circle,
+      #20101d,
+      #0c0c13
+    );
+  border:2px solid #ff4fa3;
+  color:#ff5ca9;
+  font-size:46px;
+  box-shadow:
+    0 0 20px rgba(255,50,150,.28),
+    inset 0 0 25px rgba(255,50,150,.08);
 }
 
 .loading-card h2{
   margin:8px 0 12px;
-  color:#e85b82;
-  font-size:25px
+  color:#ff78b6;
+  font-size:25px;
+  text-shadow:
+    0 0 10px rgba(255,80,160,.3);
 }
 
 .loading-card p{
   margin:0;
   line-height:1.8;
   font-size:13px;
-  font-weight:700
+  font-weight:700;
+  color:#bcb8c3;
 }
 
 .dots{
-  margin-top:24px
+  margin-top:25px;
 }
 
 .dots span{
   display:inline-block;
-  width:12px;
-  height:12px;
+  width:11px;
+  height:11px;
   margin:0 5px;
   border-radius:50%;
-  background:#f681a4;
-  animation:bounce 1.1s infinite
+  background:#ff4fa3;
+  box-shadow:
+    0 0 10px rgba(255,79,163,.7);
+  animation:bounce 1.1s infinite;
 }
 
-.dots span:nth-child(2){animation-delay:.15s}
-.dots span:nth-child(3){animation-delay:.3s}
+.dots span:nth-child(2){
+  animation-delay:.15s;
+}
+
+.dots span:nth-child(3){
+  animation-delay:.3s;
+}
 
 @keyframes bounce{
-  0%,80%,100%{transform:translateY(0)}
-  40%{transform:translateY(-9px)}
+  0%,80%,100%{
+    transform:translateY(0);
+    opacity:.55;
+  }
+
+  40%{
+    transform:translateY(-9px);
+    opacity:1;
+  }
 }
 
 .result-card{
   text-align:center;
-  padding:27px 20px 20px
+  padding:30px 20px 22px;
 }
 
 .user-icon{
   width:70px;
   height:70px;
-  margin:0 auto 10px;
+  margin:0 auto 11px;
   display:flex;
   align-items:center;
   justify-content:center;
   border-radius:50%;
-  background:linear-gradient(135deg,#ff9dbd,#f77b9f);
+  background:
+    linear-gradient(
+      135deg,
+      #ff4fa3,
+      #a72cff
+    );
   color:#fff;
-  font-size:30px
+  font-size:28px;
+  box-shadow:
+    0 0 20px rgba(255,50,150,.3);
 }
 
 .result-username{
   font-size:18px;
   font-weight:900;
-  color:#a24465
+  color:#ff9bc8;
 }
 
 .divider{
-  height:2px;
-  margin:17px 0;
-  background:#ffd5e2
+  height:1px;
+  margin:18px 0;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      #ff4fa3,
+      transparent
+    );
 }
 
 .result-label{
   font-size:17px;
   font-weight:900;
-  color:#a24465
+  color:#ddd5dc;
 }
 
 .blocked-count{
-  margin-top:2px;
-  color:#f56d96;
-  font-size:48px;
+  margin-top:5px;
+  color:#ff4fa3;
+  font-size:50px;
   line-height:1.1;
-  font-weight:1000
+  font-weight:1000;
+  text-shadow:
+    0 0 15px rgba(255,79,163,.4);
 }
 
 .unit{
   margin-top:-3px;
   font-size:16px;
-  font-weight:800
+  font-weight:800;
+  color:#c9c3ca;
 }
 
 .back-button{
   display:block;
   width:140px;
-  height:40px;
-  margin:20px auto 0;
-  border:0;
-  border-radius:12px;
-  background:#f4a5be;
-  color:#fff;
+  height:42px;
+  margin:21px auto 0;
+  border:1px solid #ff5ca9;
+  border-radius:13px;
+  background:#18131b;
+  color:#ff8fc3;
   font-size:15px;
   font-weight:800;
-  cursor:pointer
+  cursor:pointer;
+  box-shadow:
+    0 0 12px rgba(255,50,150,.12);
+}
+
+.back-button:hover{
+  background:#241522;
 }
 
 .back-description{
   margin:7px 0 0;
-  color:#aaa;
+  color:#77737b;
   font-size:9px;
-  line-height:1.4
+  line-height:1.4;
 }
 
 .error-card{
   text-align:center;
-  padding:40px 22px 30px
+  padding:43px 22px 32px;
 }
 
 .error-icon{
-  margin-bottom:12px;
-  font-size:70px
+  margin-bottom:13px;
+  font-size:68px;
+  filter:
+    drop-shadow(
+      0 0 12px rgba(255,79,163,.25)
+    );
 }
 
 .error-card h2{
   margin:0 0 10px;
-  color:#e85b82;
-  font-size:25px
+  color:#ff78b6;
+  font-size:25px;
 }
 
 .error-card p{
   margin:0 0 24px;
   font-size:14px;
-  font-weight:700
+  font-weight:700;
+  color:#bbb5bd;
 }
 
 @media(max-width:390px){
 
   .app{
     padding-left:9px;
-    padding-right:9px
+    padding-right:9px;
   }
 
   .card{
-    padding:25px 16px
+    padding:26px 16px;
   }
 
   h1{
-    font-size:35px
+    font-size:35px;
   }
-
 }
-
 </style>
-
-<!-- 結果ページを画像化するためだけに使用 -->
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-
 </head>
 
 <body>
@@ -579,10 +670,6 @@ async function check(){
 
   try{
 
-    /*
-     * ここは元の本番API処理です。
-     * 固定値321は使用しません。
-     */
     const response=
       await fetch("/api/check",{
 
@@ -630,10 +717,6 @@ async function check(){
     }
 
 
-    /*
-     * サーバーから返ってきた
-     * 実際のブロック数を使用
-     */
     currentBlocked=
       Number(data.blocked) || 0;
 
@@ -660,20 +743,7 @@ async function check(){
 }
 
 
-/*
- * X投稿画面
- *
- * ① 結果ページを画像化
- * ② 画像＋文章を端末の共有機能へ渡す
- * ③ 画像添付ができない場合は文字だけでXへ
- *
- * 画像共有に失敗しても結果ページは変更しない。
- */
-async function openXPostScreen(){
-
-  const siteUrl=
-    window.location.href;
-
+function openXPostScreen(){
 
   const text=
 `Xブロックチェッカーでチェックしました！
@@ -681,150 +751,11 @@ async function openXPostScreen(){
 ブロックされている数：
 ${currentBlocked.toLocaleString("ja-JP")}人
 
-あなたもブロック数をチェックしよう！
+みんなもブロックチェックしてみよう！✨
 
-${siteUrl}`;
-
-
-  try{
-
-    const resultCard=
-      document.querySelector(".result-card");
+${window.location.href}`;
 
 
-    if(!resultCard){
-
-      throw new Error(
-        "result_card_not_found"
-      );
-
-    }
-
-
-    if(typeof html2canvas!=="function"){
-
-      throw new Error(
-        "html2canvas_not_loaded"
-      );
-
-    }
-
-
-    /*
-     * 結果ページのカード部分を画像化
-     */
-    const canvas=
-      await html2canvas(
-        resultCard,
-        {
-          backgroundColor:"#fffafc",
-          scale:2,
-          useCORS:true
-        }
-      );
-
-
-    const blob=
-      await new Promise(resolve=>{
-
-        canvas.toBlob(
-          resolve,
-          "image/png"
-        );
-
-      });
-
-
-    if(!blob){
-
-      throw new Error(
-        "image_create_failed"
-      );
-
-    }
-
-
-    const file=
-      new File(
-        [blob],
-        "x-block-checker-result.png",
-        {
-          type:"image/png"
-        }
-      );
-
-
-    /*
-     * 画像共有が可能な端末の場合
-     */
-    if(
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({
-        files:[file]
-      })
-    ){
-
-      try{
-
-        await navigator.share({
-
-          files:[file],
-
-          title:
-            "Xブロックチェッカー",
-
-          text:text
-
-        });
-
-
-        /*
-         * 画像＋文章の共有に成功
-         */
-        return;
-
-
-      }catch(error){
-
-        /*
-         * ユーザー自身が共有をキャンセルした場合
-         *
-         * 結果ページのまま終了
-         */
-        if(error.name==="AbortError"){
-
-          return;
-
-        }
-
-
-        /*
-         * 画像共有に失敗した場合は
-         * 下の文字だけのX投稿へ進む
-         */
-
-      }
-
-    }
-
-
-  }catch(error){
-
-    console.error(
-      "画像共有準備エラー:",
-      error.message
-    );
-
-  }
-
-
-  /*
-   * 画像を添付できない場合
-   *
-   * 結果ページはそのまま。
-   * Xには文字だけを渡す。
-   */
   const url=
     "https://twitter.com/intent/tweet?text="
     + encodeURIComponent(text);
@@ -833,4 +764,53 @@ ${siteUrl}`;
   window.open(
     url,
     "_blank",
-   
+    "noopener,noreferrer"
+  );
+
+}
+
+
+document
+  .getElementById("checkButton")
+  .addEventListener("click",check);
+
+
+document
+  .getElementById("tweetButton")
+  .addEventListener(
+    "click",
+    openXPostScreen
+  );
+
+
+document
+  .getElementById("retryButton")
+  .addEventListener(
+    "click",
+    ()=>showPage(pages.input)
+  );
+
+
+usernameInput.addEventListener(
+  "keydown",
+  e=>{
+    if(e.key==="Enter"){
+      check();
+    }
+  }
+);
+
+
+messageInput.addEventListener(
+  "keydown",
+  e=>{
+    if(e.key==="Enter"){
+      check();
+    }
+  }
+);
+
+</script>
+
+</body>
+</html>
