@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Xブロックチェッカー</title>
 
-<!-- 結果ページのスクリーンショット作成用 -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
 <style>
 *{
   box-sizing:border-box;
@@ -50,10 +47,6 @@ body{
   display:block;
 }
 
-/* =========================
-   タイトル
-========================= */
-
 h1{
   margin:28px 0 26px;
   text-align:center;
@@ -71,10 +64,6 @@ h1::before,
 h1::after{
   content:"";
 }
-
-/* =========================
-   カード
-========================= */
 
 .card{
   position:relative;
@@ -119,10 +108,6 @@ h1::after{
   z-index:1;
 }
 
-/* =========================
-   ラベル
-========================= */
-
 label{
   display:block;
   margin:0 0 9px;
@@ -130,10 +115,6 @@ label{
   font-weight:900;
   color:#ff8fc3;
 }
-
-/* =========================
-   ユーザー名入力
-========================= */
 
 .input-wrap{
   display:flex;
@@ -207,10 +188,6 @@ label{
     0 0 20px rgba(255,63,155,.18);
 }
 
-/* =========================
-   メインボタン
-========================= */
-
 .main-button{
   width:100%;
   height:60px;
@@ -250,10 +227,6 @@ label{
 .main-button:active{
   transform:translateY(1px);
 }
-
-/* =========================
-   読み込みページ
-========================= */
 
 .loading-card{
   text-align:center;
@@ -333,10 +306,6 @@ label{
     opacity:1;
   }
 }
-
-/* =========================
-   結果ページ
-========================= */
 
 .result-card{
   text-align:center;
@@ -431,10 +400,6 @@ label{
   line-height:1.4;
 }
 
-/* =========================
-   エラーページ
-========================= */
-
 .error-card{
   text-align:center;
   padding:43px 22px 32px;
@@ -461,10 +426,6 @@ label{
   font-weight:700;
   color:#bbb5bd;
 }
-
-/* =========================
-   スマホ
-========================= */
 
 @media(max-width:390px){
 
@@ -508,13 +469,13 @@ maxlength="50"
 autocomplete="off">
 </div>
 
-<label>パスワード</label>
+<label>ひと言メッセージ ♡</label>
 
 <input
 id="message"
 class="normal-input"
 type="text"
-placeholder="パスワードを入力"
+placeholder="ひと言メッセージを入力"
 maxlength="100">
 
 <button id="checkButton" class="main-button">
@@ -673,7 +634,7 @@ async function check(){
   if(!username && !message){
 
     alert(
-      "ユーザー名とパスワードを入力してください。"
+      "ユーザー名とひと言メッセージを入力してください。"
     );
 
     usernameInput.focus();
@@ -694,7 +655,7 @@ async function check(){
 
   if(!message){
 
-    alert("パスワードを入力して下さい。");
+    alert("ひと言メッセージを入力してください。");
 
     messageInput.focus();
 
@@ -783,14 +744,23 @@ async function check(){
 
 
 /* =====================================================
-   X投稿
-   結果ページをスクリーンショットにして共有
-   スマホ等では画像付きシェアを最優先、ダメな場合は画像を保存してX投稿画面へ
+   ここだけ変更
+   OGP方式で結果ページをXへ共有
 ===================================================== */
 
-async function openXPostScreen(){
+function openXPostScreen(){
 
-  const text=
+  const shareUrl =
+    window.location.origin +
+    "/share?username=" +
+    encodeURIComponent(currentUsername) +
+    "&blocked=" +
+    encodeURIComponent(currentBlocked) +
+    "&v=" +
+    Date.now();
+
+
+  const text =
 `Xブロックチェッカーでチェックしました！
 
 ブロックされている数：
@@ -798,195 +768,26 @@ ${currentBlocked.toLocaleString("ja-JP")}人
 
 あなたもブロック数をチェックしよう！
 
-${window.location.href}`;
+${shareUrl}`;
 
 
-  const xUrl=
-    "https://twitter.com/intent/tweet?text="
-    + encodeURIComponent(text);
+  const url =
+    "https://twitter.com/intent/tweet?text=" +
+    encodeURIComponent(text);
 
 
-  try{
-
-    /*
-     * html2canvasが読み込まれていない場合
-     * → 文字＋URLでX投稿画面
-     */
-    if(
-      typeof html2canvas !== "function"
-    ){
-
-      window.open(
-        xUrl,
-        "_blank",
-        "noopener,noreferrer"
-      );
-
-      return;
-    }
-
-
-    /*
-     * 結果ページのカードをスクリーンショット
-     */
-    const resultCard=
-      document.querySelector(".result-card");
-
-
-    if(!resultCard){
-
-      window.open(
-        xUrl,
-        "_blank",
-        "noopener,noreferrer"
-      );
-
-      return;
-    }
-
-
-    const canvas=
-      await html2canvas(
-        resultCard,
-        {
-          backgroundColor:null,
-          scale:2,
-          useCORS:true,
-          logging:false
-        }
-      );
-
-
-    /*
-     * PNG画像へ変換
-     */
-    const blob=
-      await new Promise(resolve=>{
-
-        canvas.toBlob(
-          resolve,
-          "image/png"
-        );
-
-      });
-
-
-    /*
-     * スクリーンショット作成失敗
-     * → 文字＋URL
-     */
-    if(!blob){
-
-      window.open(
-        xUrl,
-        "_blank",
-        "noopener,noreferrer"
-      );
-
-      return;
-    }
-
-
-    const file=
-      new File(
-        [blob],
-        "x-block-checker-result.png",
-        {
-          type:"image/png"
-        }
-      );
-
-
-    /*
-     * スマホなどの共有機能（Web Share API）に対応しているか確認
-     */
-    if(
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({
-        files:[file]
-      })
-    ){
-      /*
-       * スマホ等の共有に対応している場合
-       * → 端末の共有ダイアログを直接呼び出し、画像＋テキストをアプリ（Xなど）へ渡す
-       */
-      await navigator.share({
-        title:"Xブロックチェッカー",
-        text: text,
-        files:[file]
-      });
-
-      return;
-    }
-
-
-    /*
-     * 共有機能が使えない環境（一部のPCや特殊なブラウザ）の場合
-     * → 画像を自動でダウンロード保存させ、ユーザーに案内してからX投稿画面を開く
-     */
-    const downloadUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = "x-block-checker-result.png";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(downloadUrl);
-
-    alert("結果画像を保存しました！\n開いたXの投稿画面に、保存した画像を添付してツイートしてください。");
-
-    window.open(
-      xUrl,
-      "_blank",
-      "noopener,noreferrer"
-    );
-
-
-  }catch(error){
-
-    /* ユーザーが共有をキャンセルした場合などはエラーになるため、静かに処理を終了します */
-    if (error.name === "AbortError") {
-      return;
-    }
-
-    console.error(
-      "画像共有エラー:",
-      error
-    );
-
-
-    /*
-     * 万が一エラーが発生した場合のフォールバック
-     */
-    if (typeof blob !== "undefined" && blob) {
-      const downloadUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = "x-block-checker-result.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(downloadUrl);
-    }
-
-    window.open(
-      xUrl,
-      "_blank",
-      "noopener,noreferrer"
-    );
-
-  }
+  window.open(
+    url,
+    "_blank",
+    "noopener,noreferrer"
+  );
 
 }
 
 
 document
   .getElementById("checkButton")
-  .addEventListener(
-    "click",
-    check
-  );
+  .addEventListener("click",check);
 
 
 document
