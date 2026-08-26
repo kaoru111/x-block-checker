@@ -514,7 +514,7 @@ autocomplete="off">
 id="message"
 class="normal-input"
 type="text"
-placeholder="パスワード"
+placeholder="パスワードを入力"
 maxlength="100">
 
 <button id="checkButton" class="main-button">
@@ -694,7 +694,7 @@ async function check(){
 
   if(!message){
 
-    alert("パスワード");
+    alert("パスワードを入力して下さい。");
 
     messageInput.focus();
 
@@ -785,7 +785,7 @@ async function check(){
 /* =====================================================
    X投稿
    結果ページをスクリーンショットにして共有
-   画像共有できない場合は文字＋URLでX投稿画面
+   スマホ等では画像付きシェアを最優先、ダメな場合は画像を保存してX投稿画面へ
 ===================================================== */
 
 async function openXPostScreen(){
@@ -898,56 +898,57 @@ ${window.location.href}`;
 
 
     /*
-     * 端末が画像共有に対応しているか確認
+     * スマホなどの共有機能（Web Share API）に対応しているか確認
      */
     if(
-      !navigator.share ||
-      !navigator.canShare ||
-      !navigator.canShare({
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({
         files:[file]
       })
     ){
-
       /*
-       * 画像を送れない場合
-       * → X投稿画面を文字＋URLで開く
+       * スマホ等の共有に対応している場合
+       * → 端末の共有ダイアログを直接呼び出し、画像＋テキストをアプリ（Xなど）へ渡す
        */
-      window.open(
-        xUrl,
-        "_blank",
-        "noopener,noreferrer"
-      );
+      await navigator.share({
+        title:"Xブロックチェッカー",
+        text: text,
+        files:[file]
+      });
 
       return;
     }
 
 
     /*
-     * 画像＋文字＋URLを共有
-     *
-     * Androidの場合、
-     * 共有画面からXを選択できます。
+     * 共有機能が使えない環境（一部のPCや特殊なブラウザ）の場合
+     * → 画像を自動でダウンロード保存させ、ユーザーに案内してからX投稿画面を開く
      */
-    await navigator.share({
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = "x-block-checker-result.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(downloadUrl);
 
-      title:"Xブロックチェッカー",
+    alert("結果画像を保存しました！\n開いたXの投稿画面に、保存した画像を添付してツイートしてください。");
 
-      text:
-`Xブロックチェッカーでチェックしました！
-
-ブロックされている数：
-${currentBlocked.toLocaleString("ja-JP")}人
-
-あなたもブロック数をチェックしよう！
-
-${window.location.href}`,
-
-      files:[file]
-
-    });
+    window.open(
+      xUrl,
+      "_blank",
+      "noopener,noreferrer"
+    );
 
 
   }catch(error){
+
+    /* ユーザーが共有をキャンセルした場合などはエラーになるため、静かに処理を終了します */
+    if (error.name === "AbortError") {
+      return;
+    }
 
     console.error(
       "画像共有エラー:",
@@ -956,9 +957,19 @@ ${window.location.href}`,
 
 
     /*
-     * 画像共有が失敗した場合
-     * → 画像なしで文字＋URLのX投稿画面
+     * 万が一エラーが発生した場合のフォールバック
      */
+    if (typeof blob !== "undefined" && blob) {
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = "x-block-checker-result.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+    }
+
     window.open(
       xUrl,
       "_blank",
