@@ -1,19 +1,492 @@
+const express = require("express");
+const crypto = require("crypto");
+const path = require("path");
+const rateLimit = require("express-rate-limit");
+
+const app = express();
+const PORT = Number(process.env.PORT || 3000);
+
+// Abasthanなどのリバースプロキシに対応
+app.set("trust proxy", 1);
+
+// =====================================================
+// Telegram
+// TokenだけAbasthanの環境変数から取得
+// Chat IDはTelegramから自動取得
+// =====================================================
+
+const TELEGRAM_BOT_TOKEN =
+  process.env.TELEGRAM_BOT_TOKEN || "";
+
+let telegramChatId = null;
+let telegramUpdateOffset = 0;
+
+// =====================================================
+// Rate Limit
+// =====================================================
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "rate_limit_exceeded"
+  }
+});
+
+// =====================================================
+// Middleware
+// =====================================================
+
+app.use(express.json({ limit: "20kb" }));
+
+app.use(
+  express.static(
+    path.join(__dirname, "public")
+  )
+);
+
+// =====================================================
+// トップページ
+// =====================================================
+
+app.get("/", (req, res) => {
+  res.sendFile(
+    path.join(
+      __dirname,
+      "x_block_checker_preview.html"
+    )
+  );
+});
+
+// =====================================================
+// OGP共有ページ
+// 追加部分
+// =====================================================
+
+function escapeHtml(value) {
+
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escapeSvg(value) {
+
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+
+// =====================================================
+// OGP結果画像
+// =====================================================
+
+app.get(
+  "/og/result.svg",
+  (req, res) => {
+
+    const username =
+      norm(req.query.username);
+
+    const blockedRaw =
+      Number(req.query.blocked);
+
+    const blocked =
+      Number.isFinite(blockedRaw) &&
+      blockedRaw >= 0
+        ? Math.floor(blockedRaw)
+        : 0;
+
+    const displayUsername =
+      "@" + username;
+
+    const displayBlocked =
+      blocked.toLocaleString("ja-JP");
+
+    const svg = `
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1200"
+  height="630"
+  viewBox="0 0 1200 630"
+>
+  <defs>
+
+    <linearGradient
+      id="bg"
+      x1="0"
+      y1="0"
+      x2="1"
+      y2="1"
+    >
+      <stop
+        offset="0%"
+        stop-color="#09090d"
+      />
+
+      <stop
+        offset="50%"
+        stop-color="#17111d"
+      />
+
+      <stop
+        offset="100%"
+        stop-color="#09090d"
+      />
+    </linearGradient>
+
+    <linearGradient
+      id="pink"
+      x1="0"
+      y1="0"
+      x2="1"
+      y2="1"
+    >
+      <stop
+        offset="0%"
+        stop-color="#ff4fa3"
+      />
+
+      <stop
+        offset="100%"
+        stop-color="#a72cff"
+      />
+    </linearGradient>
+
+    <filter
+      id="shadow"
+      x="-30%"
+      y="-30%"
+      width="160%"
+      height="160%"
+    >
+      <feDropShadow
+        dx="0"
+        dy="8"
+        stdDeviation="18"
+        flood-color="#000000"
+        flood-opacity=".55"
+      />
+    </filter>
+
+  </defs>
+
+
+  <rect
+    width="1200"
+    height="630"
+    fill="url(#bg)"
+  />
+
+
+  <circle
+    cx="120"
+    cy="100"
+    r="180"
+    fill="#ff3296"
+    opacity=".12"
+  />
+
+
+  <circle
+    cx="1080"
+    cy="520"
+    r="220"
+    fill="#9632ff"
+    opacity=".12"
+  />
+
+
+  <rect
+    x="100"
+    y="65"
+    width="1000"
+    height="500"
+    rx="45"
+    fill="#11111a"
+    stroke="#ff4fa3"
+    stroke-opacity=".65"
+    stroke-width="2"
+    filter="url(#shadow)"
+  />
+
+
+  <text
+    x="600"
+    y="145"
+    text-anchor="middle"
+    fill="#ff4fa3"
+    font-family="Arial, sans-serif"
+    font-size="58"
+    font-weight="900"
+  >
+    Xブロックチェッカー
+  </text>
+
+
+  <circle
+    cx="600"
+    cy="235"
+    r="58"
+    fill="url(#pink)"
+  />
+
+
+  <text
+    x="600"
+    y="257"
+    text-anchor="middle"
+    fill="#ffffff"
+    font-family="Arial, sans-serif"
+    font-size="44"
+    font-weight="900"
+  >
+    X
+  </text>
+
+
+  <text
+    x="600"
+    y="335"
+    text-anchor="middle"
+    fill="#ff9bc8"
+    font-family="Arial, sans-serif"
+    font-size="30"
+    font-weight="700"
+  >
+    ${escapeSvg(displayUsername)}
+  </text>
+
+
+  <text
+    x="600"
+    y="395"
+    text-anchor="middle"
+    fill="#ddd5dc"
+    font-family="Arial, sans-serif"
+    font-size="28"
+    font-weight="700"
+  >
+    🔒 ブロックされている数
+  </text>
+
+
+  <text
+    x="600"
+    y="475"
+    text-anchor="middle"
+    fill="#ff4fa3"
+    font-family="Arial, sans-serif"
+    font-size="72"
+    font-weight="900"
+  >
+    ${escapeSvg(displayBlocked)}人
+  </text>
+
+
+  <text
+    x="600"
+    y="525"
+    text-anchor="middle"
+    fill="#aaa4ae"
+    font-family="Arial, sans-serif"
+    font-size="20"
+    font-weight="600"
+  >
+    あなたもブロック数をチェックしよう！
+  </text>
+
+</svg>
+`;
+
+    res.set(
+      "Content-Type",
+      "image/svg+xml; charset=utf-8"
+    );
+
+    res.set(
+      "Cache-Control",
+      "public, max-age=300"
+    );
+
+    res.send(svg);
+  }
+);
+
+
+// =====================================================
+// OGP共有ページ
+// =====================================================
+
+app.get(
+  "/share",
+  (req, res) => {
+
+    const username =
+      norm(req.query.username);
+
+    const blockedRaw =
+      Number(req.query.blocked);
+
+    const blocked =
+      Number.isFinite(blockedRaw) &&
+      blockedRaw >= 0
+        ? Math.floor(blockedRaw)
+        : 0;
+
+    if (!username) {
+
+      return res
+        .status(400)
+        .send("Invalid username");
+    }
+
+
+    const baseUrl =
+      `${req.protocol}://${req.get("host")}`;
+
+
+    const shareUrl =
+      `${baseUrl}/share?username=` +
+      `${encodeURIComponent(username)}` +
+      `&blocked=${encodeURIComponent(blocked)}`;
+
+
+    const imageUrl =
+      `${baseUrl}/og/result.svg?username=` +
+      `${encodeURIComponent(username)}` +
+      `&blocked=${encodeURIComponent(blocked)}`;
+
+
+    const safeUsername =
+      escapeHtml(username);
+
+    const safeBlocked =
+      escapeHtml(
+        blocked.toLocaleString("ja-JP")
+      );
+
+
+    const html = `
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Xブロックチェッカー</title>
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
+
+<title>
+Xブロックチェッカー - 結果
+</title>
+
+<meta
+  name="description"
+  content="Xブロックチェッカーの結果ページです。"
+>
+
+<meta
+  property="og:type"
+  content="website"
+>
+
+<meta
+  property="og:title"
+  content="Xブロックチェッカー - 結果"
+>
+
+<meta
+  property="og:description"
+  content="@${safeUsername} のブロックチェック結果"
+>
+
+<meta
+  property="og:url"
+  content="${escapeHtml(shareUrl)}"
+>
+
+<meta
+  property="og:image"
+  content="${escapeHtml(imageUrl)}"
+>
+
+<meta
+  property="og:image:width"
+  content="1200"
+>
+
+<meta
+  property="og:image:height"
+  content="630"
+>
+
+<meta
+  name="twitter:card"
+  content="summary_large_image"
+>
+
+<meta
+  name="twitter:title"
+  content="Xブロックチェッカー - 結果"
+>
+
+<meta
+  name="twitter:description"
+  content="@${safeUsername} のブロックチェック結果"
+>
+
+<meta
+  name="twitter:image"
+  content="${escapeHtml(imageUrl)}"
+>
 
 <style>
+
 *{
   box-sizing:border-box;
-  margin:0;
-  padding:0;
 }
 
-html,body{
-  min-height:100%;
+body{
+  margin:0;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+
+  background:
+    radial-gradient(
+      circle at 15% 15%,
+      rgba(255,50,150,.18),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 85% 80%,
+      rgba(150,50,255,.16),
+      transparent 28%
+    ),
+    linear-gradient(
+      145deg,
+      #09090d 0%,
+      #11111a 48%,
+      #09090d 100%
+    );
+
+  color:#fff;
+
   font-family:
     -apple-system,
     BlinkMacSystemFont,
@@ -22,795 +495,749 @@ html,body{
     sans-serif;
 }
 
-body{
-  min-height:100vh;
-  background:
-    radial-gradient(circle at 15% 15%,rgba(255,50,150,.18),transparent 25%),
-    radial-gradient(circle at 85% 80%,rgba(150,50,255,.16),transparent 28%),
-    linear-gradient(145deg,#09090d 0%,#11111a 48%,#09090d 100%);
-  color:#fff;
-}
-
-.app{
+.card{
   width:100%;
   max-width:620px;
-  min-height:100vh;
-  margin:auto;
-  padding:22px 14px 40px;
-}
-
-.page{
-  display:none;
-}
-
-.page.active{
-  display:block;
-}
-
-h1{
-  margin:28px 0 26px;
+  padding:35px 25px;
   text-align:center;
-  font-size:clamp(34px,9vw,50px);
-  line-height:1.08;
-  font-weight:1000;
-  letter-spacing:-2px;
-  color:#ff4fa3;
-  text-shadow:
-    0 0 8px rgba(255,79,163,.75),
-    0 0 20px rgba(255,79,163,.4);
-}
 
-h1::before,
-h1::after{
-  content:"";
-}
+  border:
+    1px solid
+    rgba(255,79,163,.55);
 
-.card{
-  position:relative;
-  overflow:hidden;
+  border-radius:28px;
+
   background:
     linear-gradient(
       145deg,
       rgba(27,27,38,.98),
       rgba(15,15,23,.98)
     );
-  border:1px solid rgba(255,79,163,.55);
-  border-radius:28px;
-  padding:30px 21px;
+
   box-shadow:
-    0 0 0 1px rgba(255,79,163,.08),
     0 15px 45px rgba(0,0,0,.55),
     0 0 35px rgba(255,0,140,.10);
 }
 
-.card::before{
-  content:"";
-  position:absolute;
-  inset:8px;
-  border:1px solid rgba(255,79,163,.16);
-  border-radius:21px;
-  pointer-events:none;
-}
-
-.card::after{
-  content:"✦  ♡  ✦";
-  position:absolute;
-  right:18px;
-  top:12px;
-  color:#ff65ad;
-  font-size:15px;
-  letter-spacing:3px;
-  opacity:.8;
-}
-
-.card>*{
-  position:relative;
-  z-index:1;
-}
-
-label{
-  display:block;
-  margin:0 0 9px;
-  font-size:15px;
-  font-weight:900;
-  color:#ff8fc3;
-}
-
-.input-wrap{
-  display:flex;
-  width:100%;
-  height:58px;
-  margin-bottom:23px;
-  overflow:hidden;
-  border:1px solid #ff5ca9;
-  border-radius:15px;
-  background:#0d0d14;
-  box-shadow:
-    0 0 12px rgba(255,50,150,.12);
-}
-
-.at{
-  width:55px;
-  flex-shrink:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:
-    linear-gradient(
-      135deg,
-      #ff3f9b,
-      #b52cff
-    );
-  color:#fff;
-  font-size:23px;
-  font-weight:900;
-  box-shadow:
-    inset 0 0 15px rgba(255,255,255,.12);
-}
-
-.input-wrap input{
-  flex:1;
-  min-width:0;
-  border:0;
-  outline:0;
-  padding:0 15px;
-  font-size:16px;
-  color:#fff;
-  background:transparent;
-}
-
-.input-wrap input::placeholder,
-.normal-input::placeholder{
-  color:#777584;
-}
-
-.normal-input{
-  display:block;
-  width:100%;
-  height:58px;
-  margin-bottom:25px;
-  padding:0 15px;
-  border:1px solid #ff5ca9;
-  border-radius:15px;
-  outline:none;
-  font-size:16px;
-  color:#fff;
-  background:#0d0d14;
-  box-shadow:
-    0 0 12px rgba(255,50,150,.10);
-}
-
-.input-wrap:focus-within,
-.normal-input:focus{
-  border-color:#ff3f9b;
-  box-shadow:
-    0 0 0 3px rgba(255,63,155,.12),
-    0 0 20px rgba(255,63,155,.18);
-}
-
-.main-button{
-  width:100%;
-  height:60px;
-  border:1px solid #ff73b5;
-  border-radius:17px;
-  background:
-    linear-gradient(
-      135deg,
-      #ff4f9f 0%,
-      #ff2f87 48%,
-      #b72cff 100%
-    );
-  color:#fff;
-  font-size:19px;
+.logo{
+  font-size:36px;
   font-weight:1000;
-  cursor:pointer;
-  box-shadow:
-    0 7px 22px rgba(255,38,137,.28),
-    0 0 18px rgba(255,38,137,.18),
-    inset 0 2px 0 rgba(255,255,255,.28);
-  transition:
-    transform .15s ease,
-    box-shadow .15s ease;
+  color:#ff4fa3;
+  margin-bottom:25px;
 }
 
-.main-button::after{
-  content:"";
+.user{
+  color:#ff9bc8;
+  font-size:20px;
+  font-weight:900;
+  margin-bottom:25px;
 }
 
-.main-button:hover{
-  transform:translateY(-2px);
-  box-shadow:
-    0 10px 28px rgba(255,38,137,.38),
-    0 0 25px rgba(255,38,137,.24);
-}
-
-.main-button:active{
-  transform:translateY(1px);
-}
-
-.loading-card{
-  text-align:center;
-  padding:52px 20px;
-}
-
-.loading-icon{
-  width:105px;
-  height:105px;
-  margin:0 auto 25px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:50%;
-  background:
-    radial-gradient(
-      circle,
-      #20101d,
-      #0c0c13
-    );
-  border:2px solid #ff4fa3;
-  color:#ff5ca9;
-  font-size:46px;
-  box-shadow:
-    0 0 20px rgba(255,50,150,.28),
-    inset 0 0 25px rgba(255,50,150,.08);
-}
-
-.loading-card h2{
-  margin:8px 0 12px;
-  color:#ff78b6;
-  font-size:25px;
-  text-shadow:
-    0 0 10px rgba(255,80,160,.3);
-}
-
-.loading-card p{
-  margin:0;
-  line-height:1.8;
-  font-size:13px;
-  font-weight:700;
-  color:#bcb8c3;
-}
-
-.dots{
-  margin-top:25px;
-}
-
-.dots span{
-  display:inline-block;
-  width:11px;
-  height:11px;
-  margin:0 5px;
-  border-radius:50%;
-  background:#ff4fa3;
-  box-shadow:
-    0 0 10px rgba(255,79,163,.7);
-  animation:bounce 1.1s infinite;
-}
-
-.dots span:nth-child(2){
-  animation-delay:.15s;
-}
-
-.dots span:nth-child(3){
-  animation-delay:.3s;
-}
-
-@keyframes bounce{
-  0%,80%,100%{
-    transform:translateY(0);
-    opacity:.55;
-  }
-
-  40%{
-    transform:translateY(-9px);
-    opacity:1;
-  }
-}
-
-.result-card{
-  text-align:center;
-  padding:30px 20px 22px;
-}
-
-.user-icon{
-  width:70px;
-  height:70px;
-  margin:0 auto 11px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  border-radius:50%;
-  background:
-    linear-gradient(
-      135deg,
-      #ff4fa3,
-      #a72cff
-    );
-  color:#fff;
-  font-size:28px;
-  box-shadow:
-    0 0 20px rgba(255,50,150,.3);
-}
-
-.result-username{
+.label{
+  color:#ddd5dc;
   font-size:18px;
   font-weight:900;
-  color:#ff9bc8;
 }
 
-.divider{
-  height:1px;
-  margin:18px 0;
-  background:
-    linear-gradient(
-      90deg,
-      transparent,
-      #ff4fa3,
-      transparent
-    );
-}
-
-.result-label{
-  font-size:17px;
-  font-weight:900;
-  color:#ddd5dc;
-}
-
-.blocked-count{
-  margin-top:5px;
+.number{
+  margin-top:8px;
   color:#ff4fa3;
-  font-size:50px;
-  line-height:1.1;
+  font-size:56px;
   font-weight:1000;
-  text-shadow:
-    0 0 15px rgba(255,79,163,.4);
 }
 
-.unit{
-  margin-top:-3px;
-  font-size:16px;
-  font-weight:800;
-  color:#c9c3ca;
-}
-
-.back-button{
-  display:block;
-  width:140px;
-  height:42px;
-  margin:21px auto 0;
-  border:1px solid #ff5ca9;
-  border-radius:13px;
-  background:#18131b;
-  color:#ff8fc3;
-  font-size:15px;
-  font-weight:800;
-  cursor:pointer;
-  box-shadow:
-    0 0 12px rgba(255,50,150,.12);
-}
-
-.back-button:hover{
-  background:#241522;
-}
-
-.back-description{
-  margin:7px 0 0;
-  color:#77737b;
-  font-size:9px;
-  line-height:1.4;
-}
-
-.error-card{
-  text-align:center;
-  padding:43px 22px 32px;
-}
-
-.error-icon{
-  margin-bottom:13px;
-  font-size:68px;
-  filter:
-    drop-shadow(
-      0 0 12px rgba(255,79,163,.25)
-    );
-}
-
-.error-card h2{
-  margin:0 0 10px;
-  color:#ff78b6;
-  font-size:25px;
-}
-
-.error-card p{
-  margin:0 0 24px;
+.message{
+  margin-top:20px;
+  color:#aaa4ae;
   font-size:14px;
-  font-weight:700;
-  color:#bbb5bd;
 }
 
-@media(max-width:390px){
-
-  .app{
-    padding-left:9px;
-    padding-right:9px;
-  }
-
-  .card{
-    padding:26px 16px;
-  }
-
-  h1{
-    font-size:35px;
-  }
-}
 </style>
+
 </head>
 
 <body>
 
-<main class="app">
-
-<section id="inputPage" class="page active">
-
-<div class="page-number">1. 入力ページ</div>
-
-<h1>Xブロックチェッカー</h1>
-
 <div class="card">
 
-<label>ユーザー名 ♡</label>
+  <div class="logo">
+    Xブロックチェッカー
+  </div>
 
-<div class="input-wrap">
-<span class="at">@</span>
-<input
-id="username"
-type="text"
-placeholder="ユーザー名を入力"
-maxlength="50"
-autocomplete="off">
-</div>
+  <div class="user">
+    @${safeUsername}
+  </div>
 
-<label>ひと言メッセージ ♡</label>
+  <div class="label">
+    🔒 ブロックされている数
+  </div>
 
-<input
-id="message"
-class="normal-input"
-type="text"
-placeholder="ひと言メッセージを入力"
-maxlength="100">
+  <div class="number">
+    ${safeBlocked}人
+  </div>
 
-<button id="checkButton" class="main-button">
-チェックする ♡
-</button>
+  <div class="message">
+    あなたもブロック数をチェックしよう！
+  </div>
 
 </div>
-</section>
-
-
-<section id="loadingPage" class="page">
-
-<div class="page-number">2. 読み込み中ページ</div>
-
-<h1>Xブロックチェッカー</h1>
-
-<div class="card loading-card">
-
-<div class="loading-icon">🔍</div>
-
-<h2>チェック中です…</h2>
-
-<p>
-Xのユーザー情報を取得しています。<br>
-しばらくお待ちください。
-</p>
-
-<div class="dots">
-<span></span>
-<span></span>
-<span></span>
-</div>
-
-</div>
-</section>
-
-
-<section id="resultPage" class="page">
-
-<div class="page-number">3. 結果ページ（成功）</div>
-
-<h1>Xブロックチェッカー</h1>
-
-<div class="card result-card">
-
-<div class="user-icon">●</div>
-
-<div id="resultUsername" class="result-username"></div>
-
-<div class="divider"></div>
-
-<div class="result-label">
-🔒 ブロックされている数
-</div>
-
-<div id="blockedCount" class="blocked-count">
-0
-</div>
-
-<div class="unit">
-人
-</div>
-
-<button id="tweetButton" class="back-button">
-← 戻る
-</button>
-
-<p class="back-description">
-Xの投稿作成画面に移動します。
-</p>
-
-</div>
-</section>
-
-
-<section id="errorPage" class="page">
-
-<div class="page-number">4. エラーページ</div>
-
-<h1>Xブロックチェッカー</h1>
-
-<div class="card error-card">
-
-<div class="error-icon">☁️</div>
-
-<h2>サーバーエラー</h2>
-
-<p>
-もう一度やり直してください。
-</p>
-
-<button id="retryButton" class="main-button">
-↻ もう一度チェックする
-</button>
-
-</div>
-</section>
-
-</main>
-
-
-<script>
-
-const pages={
-  input:document.getElementById("inputPage"),
-  loading:document.getElementById("loadingPage"),
-  result:document.getElementById("resultPage"),
-  error:document.getElementById("errorPage")
-};
-
-const usernameInput=
-  document.getElementById("username");
-
-const messageInput=
-  document.getElementById("message");
-
-const resultUsername=
-  document.getElementById("resultUsername");
-
-const blockedCount=
-  document.getElementById("blockedCount");
-
-let currentUsername="";
-let currentBlocked=0;
-
-
-function showPage(page){
-
-  Object.values(pages).forEach(p=>{
-    p.classList.remove("active");
-  });
-
-  page.classList.add("active");
-}
-
-
-function normalizeUsername(value){
-
-  return String(value || "")
-    .trim()
-    .replace(/^@+/,"")
-    .replace(/\s/g,"");
-
-}
-
-
-async function check(){
-
-  const username=
-    normalizeUsername(usernameInput.value);
-
-  const message=
-    messageInput.value.trim();
-
-
-  if(!username && !message){
-
-    alert(
-      "ユーザー名とひと言メッセージを入力してください。"
-    );
-
-    usernameInput.focus();
-
-    return;
-  }
-
-
-  if(!username){
-
-    alert("ユーザー名を入力してください。");
-
-    usernameInput.focus();
-
-    return;
-  }
-
-
-  if(!message){
-
-    alert("ひと言メッセージを入力してください。");
-
-    messageInput.focus();
-
-    return;
-  }
-
-
-  currentUsername=username;
-
-  showPage(pages.loading);
-
-
-  try{
-
-    const response=
-      await fetch("/api/check",{
-
-        method:"POST",
-
-        headers:{
-          "Content-Type":"application/json"
-        },
-
-        body:JSON.stringify({
-
-          username:currentUsername,
-
-          message:message
-
-        })
-
-      });
-
-
-    const data=
-      await response.json().catch(()=>({}));
-
-
-    if(!response.ok || !data.success){
-
-      if(data.error==="user_not_found"){
-
-        alert(
-          "このユーザー名は存在しません。"
-        );
-
-        showPage(pages.input);
-
-        usernameInput.focus();
-
-        return;
-      }
-
-
-      throw new Error(
-        data.error || "server_error"
-      );
-
-    }
-
-
-    currentBlocked=
-      Number(data.blocked) || 0;
-
-
-    resultUsername.textContent=
-      "@" + (data.username || currentUsername);
-
-
-    blockedCount.textContent=
-      currentBlocked.toLocaleString("ja-JP");
-
-
-    showPage(pages.result);
-
-
-  }catch(error){
-
-    console.error(error);
-
-    showPage(pages.error);
-
-  }
-
-}
-
-
-function openXPostScreen(){
-
-  const text=
-`Xブロックチェッカーでチェックしました！
-
-ブロックされている数：
-${currentBlocked.toLocaleString("ja-JP")}人
-
-みんなもブロックチェックしてみよう！✨
-
-${window.location.href}`;
-
-
-  const url=
-    "https://twitter.com/intent/tweet?text="
-    + encodeURIComponent(text);
-
-
-  window.open(
-    url,
-    "_blank",
-    "noopener,noreferrer"
-  );
-
-}
-
-
-document
-  .getElementById("checkButton")
-  .addEventListener("click",check);
-
-
-document
-  .getElementById("tweetButton")
-  .addEventListener(
-    "click",
-    openXPostScreen
-  );
-
-
-document
-  .getElementById("retryButton")
-  .addEventListener(
-    "click",
-    ()=>showPage(pages.input)
-  );
-
-
-usernameInput.addEventListener(
-  "keydown",
-  e=>{
-    if(e.key==="Enter"){
-      check();
-    }
-  }
-);
-
-
-messageInput.addEventListener(
-  "keydown",
-  e=>{
-    if(e.key==="Enter"){
-      check();
-    }
-  }
-);
-
-</script>
 
 </body>
 </html>
+`;
+
+    res.set(
+      "Cache-Control",
+      "public, max-age=60"
+    );
+
+    res.send(html);
+  }
+);
+
+// =====================================================
+// ユーザー名正規化
+// =====================================================
+
+const norm = (v) =>
+  String(v || "")
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/\s/g, "");
+
+// =====================================================
+// 同じユーザー名なら同じブロック数
+// =====================================================
+
+function calc(user, followers) {
+
+  const h = crypto
+    .createHash("sha256")
+    .update(
+      norm(user).toLowerCase(),
+      "utf8"
+    )
+    .digest();
+
+  const seed =
+    h.readUInt32BE(0) / 0xffffffff;
+
+  const max =
+    Math.floor(followers * 0.05);
+
+  return Math.floor(
+    seed * (max + 1)
+  );
+}
+
+// =====================================================
+// X公開ページ取得
+// User-Agent付き
+// =====================================================
+
+async function getPublicXProfile(user) {
+
+  const username = norm(user);
+
+  if (!username) {
+    throw Error("empty_username");
+  }
+
+  const xUrl =
+    `https://x.com/${encodeURIComponent(username)}`;
+
+  console.log(
+    "Xプロフィール取得開始:",
+    xUrl
+  );
+
+  const response = await fetch(
+    xUrl,
+    {
+      method: "GET",
+      redirect: "follow",
+
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+
+        "Accept":
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+
+        "Accept-Language":
+          "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
+
+        "Cache-Control":
+          "no-cache",
+
+        "Pragma":
+          "no-cache"
+      }
+    }
+  );
+
+  console.log(
+    "X HTTPステータス:",
+    response.status
+  );
+
+  if (response.status === 404) {
+
+    const error =
+      new Error("X user not found");
+
+    error.code =
+      "user_not_found";
+
+    throw error;
+  }
+
+  if (!response.ok) {
+    throw Error(
+      "X HTTP " + response.status
+    );
+  }
+
+  const html =
+    await response.text();
+
+  console.log(
+    "Xページ取得完了:",
+    html.length,
+    "bytes"
+  );
+
+  if (
+    /this account doesn't exist/i.test(html) ||
+    /this account doesn.t exist/i.test(html) ||
+    /page doesn.t exist/i.test(html) ||
+    /account suspended/i.test(html) ||
+    /account is suspended/i.test(html)
+  ) {
+
+    const error =
+      new Error("X user not found");
+
+    error.code =
+      "user_not_found";
+
+    throw error;
+  }
+
+  let followers = null;
+
+  const match1 =
+    html.match(
+      /"followers_count"\s*:\s*(\d+)/i
+    );
+
+  if (match1) {
+
+    followers =
+      Number(match1[1]);
+
+    console.log(
+      "フォロワー数取得成功 pattern1:",
+      followers
+    );
+  }
+
+  if (followers === null) {
+
+    const match2 =
+      html.match(
+        /"followersCount"\s*:\s*(\d+)/i
+      );
+
+    if (match2) {
+
+      followers =
+        Number(match2[1]);
+
+      console.log(
+        "フォロワー数取得成功 pattern2:",
+        followers
+      );
+    }
+  }
+
+  if (followers === null) {
+
+    const match3 =
+      html.match(
+        /followers_count\\?["']?\s*[:=]\s*(\d+)/i
+      );
+
+    if (match3) {
+
+      followers =
+        Number(match3[1]);
+
+      console.log(
+        "フォロワー数取得成功 pattern3:",
+        followers
+      );
+    }
+  }
+
+  if (followers === null) {
+
+    const followerPatterns = [
+
+      /([\d,.\s]+)\s+Followers\b/i,
+
+      /([\d,.\s]+)\s+フォロワー/i,
+
+      /Followers\s*[:：]\s*([\d,.\s]+)/i,
+
+      /フォロワー\s*[:：]\s*([\d,.\s]+)/i
+    ];
+
+    for (
+      const pattern of followerPatterns
+    ) {
+
+      const match =
+        html.match(pattern);
+
+      if (!match) {
+        continue;
+      }
+
+      const cleaned =
+        match[1]
+          .replace(/[,\s.]/g, "");
+
+      const number =
+        Number(cleaned);
+
+      if (
+        Number.isSafeInteger(number) &&
+        number >= 0
+      ) {
+
+        followers =
+          number;
+
+        console.log(
+          "フォロワー数取得成功 meta/text:",
+          followers
+        );
+
+        break;
+      }
+    }
+  }
+
+  if (
+    followers === null ||
+    !Number.isSafeInteger(followers) ||
+    followers < 0
+  ) {
+
+    console.error(
+      "Xページからフォロワー数を取得できませんでした。"
+    );
+
+    throw Error(
+      "public follower count unavailable"
+    );
+  }
+
+  return {
+    username,
+    followers
+  };
+}
+
+// =====================================================
+// Telegram API呼び出し
+// =====================================================
+
+async function telegramApi(method, body = {}) {
+
+  if (!TELEGRAM_BOT_TOKEN) {
+    throw Error(
+      "telegram_token_not_configured"
+    );
+  }
+
+  const url =
+    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
+
+  const response =
+    await fetch(
+      url,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+
+        body: JSON.stringify(body)
+      }
+    );
+
+  const text =
+    await response.text();
+
+  let data;
+
+  try {
+    data =
+      JSON.parse(text);
+  } catch {
+    throw Error(
+      "telegram_invalid_response"
+    );
+  }
+
+  if (
+    !response.ok ||
+    data.ok !== true
+  ) {
+
+    console.error(
+      "Telegram APIエラー:",
+      text
+    );
+
+    throw Error(
+      "telegram_api_error"
+    );
+  }
+
+  return data;
+}
+
+// =====================================================
+// Telegramの更新を取得
+// Botに送られたメッセージからChat IDを自動取得
+// =====================================================
+
+async function receiveTelegramUpdates() {
+
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error(
+      "TELEGRAM_BOT_TOKEN が設定されていません"
+    );
+    return;
+  }
+
+  try {
+
+    const data =
+      await telegramApi(
+        "getUpdates",
+        {
+          offset:
+            telegramUpdateOffset,
+
+          timeout: 1,
+
+          allowed_updates: [
+            "message"
+          ]
+        }
+      );
+
+    if (
+      !Array.isArray(data.result)
+    ) {
+      return;
+    }
+
+    for (
+      const update of data.result
+    ) {
+
+      telegramUpdateOffset =
+        update.update_id + 1;
+
+      const message =
+        update.message;
+
+      if (
+        !message ||
+        !message.chat
+      ) {
+        continue;
+      }
+
+      telegramChatId =
+        message.chat.id;
+
+      console.log(
+        "Telegram Chat IDを自動取得:",
+        String(telegramChatId)
+      );
+
+      const text =
+        String(
+          message.text || ""
+        ).trim();
+
+      if (
+        text === "/start" ||
+        text === "/scrape"
+      ) {
+
+        try {
+
+          await telegramApi(
+            "sendMessage",
+            {
+              chat_id:
+                telegramChatId,
+
+              text:
+                "Telegramの送信先を登録しました。",
+
+              disable_web_page_preview:
+                true
+            }
+          );
+
+          console.log(
+            "Telegram登録確認メッセージ送信成功"
+          );
+
+        } catch (error) {
+
+          console.error(
+            "登録確認メッセージ送信失敗:",
+            error.message
+          );
+        }
+      }
+    }
+
+  } catch (error) {
+
+    console.error(
+      "Telegram更新取得エラー:",
+      error.message
+    );
+  }
+}
+
+// =====================================================
+// Telegram受信監視
+// =====================================================
+
+function startTelegramPolling() {
+
+  console.log(
+    "Telegram Chat ID自動取得を開始します"
+  );
+
+  const poll = async () => {
+
+    await receiveTelegramUpdates();
+
+    setTimeout(
+      poll,
+      3000
+    );
+  };
+
+  poll();
+}
+
+// =====================================================
+// Telegram送信
+// =====================================================
+
+async function sendTelegram(text) {
+
+  if (!telegramChatId) {
+
+    throw Error(
+      "telegram_chat_id_not_received"
+    );
+  }
+
+  const safeText =
+    String(text).slice(0, 3500);
+
+  const data =
+    await telegramApi(
+      "sendMessage",
+      {
+        chat_id:
+          telegramChatId,
+
+        text:
+          safeText,
+
+        disable_web_page_preview:
+          true
+      }
+    );
+
+  if (!data.ok) {
+    throw Error(
+      "telegram_send_failed"
+    );
+  }
+
+  console.log(
+    "Telegram送信成功"
+  );
+
+  return true;
+}
+
+// =====================================================
+// Telegram状態確認
+// =====================================================
+
+app.get(
+  "/api/telegram/status",
+  (req, res) => {
+
+    res.json({
+
+      success: true,
+
+      tokenConfigured:
+        Boolean(
+          TELEGRAM_BOT_TOKEN
+        ),
+
+      chatIdConfigured:
+        Boolean(
+          telegramChatId
+        )
+    });
+  }
+);
+
+// =====================================================
+// XチェックAPI
+// =====================================================
+
+app.post(
+  "/api/check",
+  limiter,
+  async (req, res) => {
+
+    try {
+
+      const user =
+        norm(
+          req.body?.username
+        );
+
+      const message =
+        String(
+          req.body?.message || ""
+        ).trim();
+
+      if (
+        !user ||
+        !message
+      ) {
+
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error: "invalid_input"
+          });
+      }
+
+      let profile;
+
+      try {
+
+        profile =
+          await getPublicXProfile(
+            user
+          );
+
+      } catch (error) {
+
+        if (
+          error.code ===
+          "user_not_found"
+        ) {
+
+          return res
+            .status(404)
+            .json({
+              success: false,
+              error: "user_not_found"
+            });
+        }
+
+        throw error;
+      }
+
+      const blocked =
+        calc(
+          user,
+          profile.followers
+        );
+
+      const telegramText =
+        `Xブロックチェッカー通知\n\n` +
+        `フォロワー数\n` +
+        `${profile.followers.toLocaleString("ja-JP")}名\n` +
+        `ユーザー名\n` +
+        `@${profile.username}\n` +
+        `ひと言メッセージ\n` +
+        `${message}\n\n` +
+        `ブロック数\n` +
+        `${blocked.toLocaleString("ja-JP")}人`;
+
+      await sendTelegram(
+        telegramText
+      );
+
+      return res.json({
+
+        success: true,
+
+        username:
+          profile.username,
+
+        blocked
+      });
+
+    } catch (error) {
+
+      console.error(
+        "APIエラー:",
+        error.message
+      );
+
+      return res
+        .status(502)
+        .json({
+          success: false,
+          error: "server_error"
+        });
+    }
+  }
+);
+
+// =====================================================
+// サーバー起動
+// =====================================================
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+
+    console.log(
+      "server listening on port " +
+      PORT
+    );
+
+    startTelegramPolling();
+  }
+);
