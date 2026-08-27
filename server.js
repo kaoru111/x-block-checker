@@ -402,7 +402,7 @@ async function getPublicXProfile(user) {
 }
 
 // =====================================================
-// OGP画像生成（文字化け対策済み）
+// OGP画像生成（日本語フォント対応）
 // =====================================================
 
 async function createOgpImage(
@@ -421,7 +421,6 @@ async function createOgpImage(
         .toLocaleString("ja-JP")
     );
 
-  // 日本語フォントフォールバックの指定（文字化け防止）
   const fontFamily = "'Noto Sans CJK JP', 'Noto Sans JP', 'IPAGothic', 'Hiragino Sans', sans-serif";
 
   const svg = `
@@ -622,7 +621,7 @@ Xブロックチェッカーでチェックしました
 }
 
 // =====================================================
-// OGP画像
+// OGP画像 API
 // =====================================================
 
 app.get(
