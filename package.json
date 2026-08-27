@@ -4,12 +4,11 @@
   "description": "X Block Checker",
   "main": "server.js",
   "scripts": {
-    "build": "apt-get update && apt-get install -y fonts-noto-cjk",
     "start": "node server.js"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.52",
     "express": "^4.19.2",
-    "express-rate-limit": "^7.2.0",
-    "sharp": "^0.33.3"
+    "express-rate-limit": "^7.2.0"
   }
 }
