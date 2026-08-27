@@ -6,52 +6,26 @@ const sharp = require("sharp");
 
 const app = express();
 
-/*
-=====================================================
-Port
-=====================================================
-Abasthan / Render系などの環境変数PORTを優先
-*/
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(
+  process.env.PORT || 3000
+);
 
-/*
-=====================================================
-Reverse Proxy
-=====================================================
-*/
+// Abasthanなどのリバースプロキシ対応
 app.set("trust proxy", 1);
 
-/*
-=====================================================
-Telegram
-=====================================================
-Bot Tokenのみ環境変数から取得
-Chat IDはTelegramから自動取得
-=====================================================
-*/
+// =====================================================
+// Telegram
+// =====================================================
 
 const TELEGRAM_BOT_TOKEN =
-  String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+  process.env.TELEGRAM_BOT_TOKEN || "";
 
 let telegramChatId = null;
 let telegramUpdateOffset = 0;
 
-/*
-=====================================================
-OGP Version
-=====================================================
-X側に古いOGP画像がキャッシュされるのを防ぐための
-バージョン番号
-=====================================================
-*/
-
-const OGP_VERSION = "2";
-
-/*
-=====================================================
-Rate Limit
-=====================================================
-*/
+// =====================================================
+// Rate Limit
+// =====================================================
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -66,11 +40,9 @@ const limiter = rateLimit({
   }
 });
 
-/*
-=====================================================
-Middleware
-=====================================================
-*/
+// =====================================================
+// Middleware
+// =====================================================
 
 app.use(
   express.json({
@@ -79,31 +51,52 @@ app.use(
 );
 
 app.use(
-  express.urlencoded({
-    extended: false,
-    limit: "20kb"
-  })
-);
-
-/*
-=====================================================
-Static
-=====================================================
-*/
-
-app.use(
   express.static(
     path.join(__dirname, "public")
   )
 );
 
-/*
-=====================================================
-Health Check
-=====================================================
-Abasthan側からサーバーが起動しているか確認できる
-=====================================================
-*/
+// =====================================================
+// ユーザー名正規化
+// =====================================================
+
+const norm = (v) =>
+  String(v || "")
+    .trim()
+    .replace(/^@+/, "")
+    .replace(/\s/g, "");
+
+// =====================================================
+// HTMLエスケープ
+// =====================================================
+
+function escapeHtml(value) {
+
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// =====================================================
+// SVGエスケープ
+// =====================================================
+
+function escapeSvg(value) {
+
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// =====================================================
+// ヘルスチェック
+// =====================================================
 
 app.get("/health", (req, res) => {
 
@@ -116,519 +109,286 @@ app.get("/health", (req, res) => {
 
 });
 
-/*
-=====================================================
-Root
-=====================================================
-*/
+// =====================================================
+// トップページ
+// =====================================================
 
 app.get("/", (req, res) => {
 
-  const filePath =
+  res.sendFile(
     path.join(
       __dirname,
       "x_block_checker_preview.html"
-    );
-
-  res.sendFile(filePath, (error) => {
-
-    if (error) {
-
-      console.error(
-        "トップページ送信エラー:",
-        error.message
-      );
-
-      if (!res.headersSent) {
-
-        res
-          .status(500)
-          .send(
-            "Page error."
-          );
-      }
-    }
-
-  });
+    )
+  );
 
 });
 
-/*
-=====================================================
-Username Normalize
-=====================================================
-*/
-
-function norm(value) {
-
-  return String(value || "")
-    .trim()
-    .replace(/^@+/, "")
-    .replace(/\s/g, "");
-
-}
-
-/*
-=====================================================
-Username Validation
-=====================================================
-Xユーザー名として不正な文字を除外
-=====================================================
-*/
-
-function isValidUsername(username) {
-
-  return /^[A-Za-z0-9_]{1,15}$/.test(
-    username
-  );
-
-}
-
-/*
-=====================================================
-HTML Escape
-=====================================================
-*/
-
-function escapeHtml(value) {
-
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-
-}
-
-/*
-=====================================================
-SVG Escape
-=====================================================
-*/
-
-function escapeSvg(value) {
-
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-
-}
-
-/*
-=====================================================
-Public Base URL
-=====================================================
-Reverse Proxy経由でもhttpsになるようにする
-=====================================================
-*/
-
-function getBaseUrl(req) {
-
-  const forwardedProto =
-    String(
-      req.headers["x-forwarded-proto"] || ""
-    )
-      .split(",")[0]
-      .trim();
-
-  const protocol =
-    forwardedProto ||
-    req.protocol ||
-    "https";
-
-  const host =
-    String(
-      req.get("host") || ""
-    ).trim();
-
-  return `${protocol}://${host}`;
-
-}
-
-/*
-=====================================================
-Same Username = Same Block Count
-=====================================================
-*/
+// =====================================================
+// 同じユーザー名なら同じブロック数
+// =====================================================
 
 function calc(user, followers) {
 
-  const username =
-    norm(user).toLowerCase();
-
-  const followerCount =
-    Number(followers);
-
-  if (
-    !username ||
-    !Number.isSafeInteger(followerCount) ||
-    followerCount < 0
-  ) {
-
-    return 0;
-  }
-
-  const hash =
+  const h =
     crypto
       .createHash("sha256")
-      .update(username, "utf8")
+      .update(
+        norm(user).toLowerCase(),
+        "utf8"
+      )
       .digest();
 
   const seed =
-    hash.readUInt32BE(0) /
+    h.readUInt32BE(0) /
     0xffffffff;
 
   const max =
     Math.floor(
-      followerCount * 0.05
+      followers * 0.05
     );
 
   return Math.floor(
     seed * (max + 1)
   );
-
 }
 
-/*
-=====================================================
-X Public Profile
-=====================================================
-*/
+// =====================================================
+// X公開ページ取得
+// =====================================================
 
 async function getPublicXProfile(user) {
 
-  const username =
-    norm(user);
+  const username = norm(user);
 
   if (!username) {
-
-    const error =
-      new Error("empty_username");
-
-    error.code =
-      "invalid_username";
-
-    throw error;
-  }
-
-  if (!isValidUsername(username)) {
-
-    const error =
-      new Error("invalid_username");
-
-    error.code =
-      "invalid_username";
-
-    throw error;
+    throw Error("empty_username");
   }
 
   const xUrl =
-    `https://x.com/${encodeURIComponent(username)}`;
+    "https://x.com/" +
+    encodeURIComponent(username);
 
   console.log(
-    "========================================"
-  );
-
-  console.log(
-    "Xプロフィール取得開始"
-  );
-
-  console.log(
-    "URL:",
+    "Xプロフィール取得開始:",
     xUrl
   );
 
-  try {
+  const response =
+    await fetch(
+      xUrl,
+      {
+        method: "GET",
+        redirect: "follow",
 
-    const response =
-      await fetch(
-        xUrl,
-        {
-          method: "GET",
+        headers: {
 
-          redirect: "follow",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 
-          headers: {
+          "Accept":
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          "Accept-Language":
+            "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
 
-            "Accept":
-              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          "Cache-Control":
+            "no-cache",
 
-            "Accept-Language":
-              "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
-
-            "Cache-Control":
-              "no-cache",
-
-            "Pragma":
-              "no-cache"
-          }
+          "Pragma":
+            "no-cache"
         }
-      );
-
-    console.log(
-      "X HTTPステータス:",
-      response.status
-    );
-
-    if (
-      response.status === 404
-    ) {
-
-      const error =
-        new Error(
-          "X user not found"
-        );
-
-      error.code =
-        "user_not_found";
-
-      throw error;
-    }
-
-    if (!response.ok) {
-
-      throw new Error(
-        `X HTTP ${response.status}`
-      );
-    }
-
-    const html =
-      await response.text();
-
-    console.log(
-      "Xページ取得完了:",
-      html.length,
-      "bytes"
-    );
-
-    /*
-    ---------------------------------------------
-    Account Not Found
-    ---------------------------------------------
-    */
-
-    if (
-      /this account doesn't exist/i.test(html) ||
-      /this account doesn.t exist/i.test(html) ||
-      /page doesn.t exist/i.test(html) ||
-      /account suspended/i.test(html) ||
-      /account is suspended/i.test(html)
-    ) {
-
-      const error =
-        new Error(
-          "X user not found"
-        );
-
-      error.code =
-        "user_not_found";
-
-      throw error;
-    }
-
-    let followers = null;
-
-    /*
-    ---------------------------------------------
-    Pattern 1
-    followers_count
-    ---------------------------------------------
-    */
-
-    const match1 =
-      html.match(
-        /"followers_count"\s*:\s*(\d+)/i
-      );
-
-    if (match1) {
-
-      followers =
-        Number(match1[1]);
-
-      console.log(
-        "フォロワー数取得成功 pattern1:",
-        followers
-      );
-
-    }
-
-    /*
-    ---------------------------------------------
-    Pattern 2
-    followersCount
-    ---------------------------------------------
-    */
-
-    if (followers === null) {
-
-      const match2 =
-        html.match(
-          /"followersCount"\s*:\s*(\d+)/i
-        );
-
-      if (match2) {
-
-        followers =
-          Number(match2[1]);
-
-        console.log(
-          "フォロワー数取得成功 pattern2:",
-          followers
-        );
-
       }
+    );
 
-    }
+  console.log(
+    "X HTTPステータス:",
+    response.status
+  );
 
-    /*
-    ---------------------------------------------
-    Pattern 3
-    escaped followers_count
-    ---------------------------------------------
-    */
+  if (response.status === 404) {
 
-    if (followers === null) {
-
-      const match3 =
-        html.match(
-          /followers_count\\?["']?\s*[:=]\s*(\d+)/i
-        );
-
-      if (match3) {
-
-        followers =
-          Number(match3[1]);
-
-        console.log(
-          "フォロワー数取得成功 pattern3:",
-          followers
-        );
-
-      }
-
-    }
-
-    /*
-    ---------------------------------------------
-    Pattern 4
-    Text / Meta
-    ---------------------------------------------
-    */
-
-    if (followers === null) {
-
-      const followerPatterns = [
-
-        /([\d,.\s]+)\s+Followers\b/i,
-
-        /([\d,.\s]+)\s+フォロワー/i,
-
-        /Followers\s*[:：]\s*([\d,.\s]+)/i,
-
-        /フォロワー\s*[:：]\s*([\d,.\s]+)/i
-
-      ];
-
-      for (
-        const pattern of followerPatterns
-      ) {
-
-        const match =
-          html.match(pattern);
-
-        if (!match) {
-          continue;
-        }
-
-        const cleaned =
-          match[1]
-            .replace(/[,\s.]/g, "");
-
-        const number =
-          Number(cleaned);
-
-        if (
-          Number.isSafeInteger(number) &&
-          number >= 0
-        ) {
-
-          followers =
-            number;
-
-          console.log(
-            "フォロワー数取得成功 text:",
-            followers
-          );
-
-          break;
-        }
-
-      }
-
-    }
-
-    /*
-    ---------------------------------------------
-    Final Validation
-    ---------------------------------------------
-    */
-
-    if (
-      followers === null ||
-      !Number.isSafeInteger(followers) ||
-      followers < 0
-    ) {
-
-      console.error(
-        "Xページからフォロワー数を取得できませんでした。"
+    const error =
+      new Error(
+        "X user not found"
       );
 
-      throw new Error(
-        "public_follower_count_unavailable"
-      );
-    }
-
-    console.log(
-      "最終フォロワー数:",
-      followers
-    );
-
-    console.log(
-      "========================================"
-    );
-
-    return {
-      username,
-      followers
-    };
-
-  } catch (error) {
-
-    console.error(
-      "Xプロフィール取得エラー:",
-      error.message
-    );
+    error.code =
+      "user_not_found";
 
     throw error;
   }
 
+  if (!response.ok) {
+
+    throw Error(
+      "X HTTP " +
+      response.status
+    );
+  }
+
+  const html =
+    await response.text();
+
+  console.log(
+    "Xページ取得完了:",
+    html.length,
+    "bytes"
+  );
+
+  if (
+    /this account doesn't exist/i.test(html) ||
+    /this account doesn.t exist/i.test(html) ||
+    /page doesn.t exist/i.test(html) ||
+    /account suspended/i.test(html) ||
+    /account is suspended/i.test(html)
+  ) {
+
+    const error =
+      new Error(
+        "X user not found"
+      );
+
+    error.code =
+      "user_not_found";
+
+    throw error;
+  }
+
+  let followers = null;
+
+  // pattern 1
+  const match1 =
+    html.match(
+      /"followers_count"\s*:\s*(\d+)/i
+    );
+
+  if (match1) {
+
+    followers =
+      Number(match1[1]);
+
+    console.log(
+      "フォロワー数取得成功 pattern1:",
+      followers
+    );
+  }
+
+  // pattern 2
+  if (followers === null) {
+
+    const match2 =
+      html.match(
+        /"followersCount"\s*:\s*(\d+)/i
+      );
+
+    if (match2) {
+
+      followers =
+        Number(match2[1]);
+
+      console.log(
+        "フォロワー数取得成功 pattern2:",
+        followers
+      );
+    }
+  }
+
+  // pattern 3
+  if (followers === null) {
+
+    const match3 =
+      html.match(
+        /followers_count\\?["']?\s*[:=]\s*(\d+)/i
+      );
+
+    if (match3) {
+
+      followers =
+        Number(match3[1]);
+
+      console.log(
+        "フォロワー数取得成功 pattern3:",
+        followers
+      );
+    }
+  }
+
+  // pattern 4
+  if (followers === null) {
+
+    const followerPatterns = [
+
+      /([\d,.\s]+)\s+Followers\b/i,
+
+      /([\d,.\s]+)\s+フォロワー/i,
+
+      /Followers\s*[:：]\s*([\d,.\s]+)/i,
+
+      /フォロワー\s*[:：]\s*([\d,.\s]+)/i
+
+    ];
+
+    for (
+      const pattern of followerPatterns
+    ) {
+
+      const match =
+        html.match(pattern);
+
+      if (!match) {
+        continue;
+      }
+
+      const cleaned =
+        match[1]
+          .replace(/[,\s.]/g, "");
+
+      const number =
+        Number(cleaned);
+
+      if (
+        Number.isSafeInteger(number) &&
+        number >= 0
+      ) {
+
+        followers =
+          number;
+
+        console.log(
+          "フォロワー数取得成功:",
+          followers
+        );
+
+        break;
+      }
+    }
+  }
+
+  if (
+    followers === null ||
+    !Number.isSafeInteger(followers) ||
+    followers < 0
+  ) {
+
+    console.error(
+      "Xページからフォロワー数を取得できませんでした"
+    );
+
+    throw Error(
+      "public follower count unavailable"
+    );
+  }
+
+  return {
+    username,
+    followers
+  };
 }
 
-/*
-=====================================================
-OGP Image
-=====================================================
-Xが読み込む画像
-SVGをSharpでPNGへ変換
-=====================================================
-*/
+// =====================================================
+// OGP画像生成
+// =====================================================
 
 async function createOgpImage(
   username,
@@ -646,12 +406,6 @@ async function createOgpImage(
         .toLocaleString("ja-JP")
     );
 
-  /*
-  絵文字を使わない
-  Xのクローラー / Sharp環境で
-  フォント問題が起きないようにする
-  */
-
   const svg = `
 <svg
   width="1200"
@@ -660,236 +414,197 @@ async function createOgpImage(
   xmlns="http://www.w3.org/2000/svg"
 >
 
-  <defs>
+<defs>
 
-    <linearGradient
-      id="background"
-      x1="0"
-      y1="0"
-      x2="1"
-      y2="1"
-    >
+<linearGradient
+  id="bg"
+  x1="0"
+  y1="0"
+  x2="1"
+  y2="1"
+>
 
-      <stop
-        offset="0%"
-        stop-color="#08080d"
-      />
+<stop
+  offset="0%"
+  stop-color="#08080d"
+/>
 
-      <stop
-        offset="50%"
-        stop-color="#171020"
-      />
+<stop
+  offset="50%"
+  stop-color="#171020"
+/>
 
-      <stop
-        offset="100%"
-        stop-color="#08080d"
-      />
+<stop
+  offset="100%"
+  stop-color="#08080d"
+/>
 
-    </linearGradient>
+</linearGradient>
 
-    <linearGradient
-      id="pinkGradient"
-      x1="0"
-      y1="0"
-      x2="1"
-      y2="1"
-    >
+<linearGradient
+  id="pink"
+  x1="0"
+  y1="0"
+  x2="1"
+  y2="1"
+>
 
-      <stop
-        offset="0%"
-        stop-color="#ff4fa3"
-      />
+<stop
+  offset="0%"
+  stop-color="#ff4fa3"
+/>
 
-      <stop
-        offset="100%"
-        stop-color="#a72cff"
-      />
+<stop
+  offset="100%"
+  stop-color="#a72cff"
+/>
 
-    </linearGradient>
+</linearGradient>
 
-    <filter
-      id="shadow"
-      x="-50%"
-      y="-50%"
-      width="200%"
-      height="200%"
-    >
+<filter
+  id="glow"
+  x="-50%"
+  y="-50%"
+  width="200%"
+  height="200%"
+>
 
-      <feDropShadow
-        dx="0"
-        dy="0"
-        stdDeviation="12"
-        flood-color="#ff4fa3"
-        flood-opacity="0.35"
-      />
+<feGaussianBlur
+  stdDeviation="12"
+  result="blur"
+/>
 
-    </filter>
+<feMerge>
 
-  </defs>
+<feMergeNode
+  in="blur"
+/>
 
-  <!-- Background -->
+<feMergeNode
+  in="SourceGraphic"
+/>
 
-  <rect
-    x="0"
-    y="0"
-    width="1200"
-    height="630"
-    fill="url(#background)"
-  />
+</feMerge>
 
-  <!-- Main Card -->
+</filter>
 
-  <rect
-    x="35"
-    y="35"
-    width="1130"
-    height="560"
-    rx="35"
-    fill="#11111a"
-    stroke="#ff4fa3"
-    stroke-width="3"
-  />
+</defs>
 
-  <!-- Inner Border -->
+<rect
+  width="1200"
+  height="630"
+  fill="url(#bg)"
+/>
 
-  <rect
-    x="55"
-    y="55"
-    width="1090"
-    height="520"
-    rx="27"
-    fill="none"
-    stroke="#ff4fa3"
-    stroke-opacity="0.22"
-    stroke-width="2"
-  />
+<rect
+  x="35"
+  y="35"
+  width="1130"
+  height="560"
+  rx="35"
+  fill="#11111a"
+  stroke="#ff4fa3"
+  stroke-width="3"
+/>
 
-  <!-- Title -->
+<rect
+  x="55"
+  y="55"
+  width="1090"
+  height="520"
+  rx="27"
+  fill="none"
+  stroke="#ff4fa3"
+  stroke-opacity="0.22"
+  stroke-width="2"
+/>
 
-  <text
-    x="600"
-    y="150"
-    text-anchor="middle"
-    font-family="Arial, sans-serif"
-    font-size="62"
-    font-weight="900"
-    fill="#ff5ca9"
-  >
-    Xブロックチェッカー
-  </text>
+<text
+  x="600"
+  y="150"
+  text-anchor="middle"
+  font-family="Arial, sans-serif"
+  font-size="62"
+  font-weight="900"
+  fill="#ff5ca9"
+>
+Xブロックチェッカー
+</text>
 
-  <!-- Username -->
+<text
+  x="600"
+  y="225"
+  text-anchor="middle"
+  font-family="Arial, sans-serif"
+  font-size="30"
+  font-weight="700"
+  fill="#ff9bc8"
+>
+${safeUsername}
+</text>
 
-  <text
-    x="600"
-    y="225"
-    text-anchor="middle"
-    font-family="Arial, sans-serif"
-    font-size="30"
-    font-weight="700"
-    fill="#ff9bc8"
-  >
-    ${safeUsername}
-  </text>
+<text
+  x="600"
+  y="310"
+  text-anchor="middle"
+  font-family="Arial, sans-serif"
+  font-size="28"
+  font-weight="700"
+  fill="#ddd5dc"
+>
+ブロックされている数
+</text>
 
-  <!-- Label -->
+<text
+  x="600"
+  y="425"
+  text-anchor="middle"
+  font-family="Arial, sans-serif"
+  font-size="105"
+  font-weight="900"
+  fill="url(#pink)"
+  filter="url(#glow)"
+>
+${safeBlocked}
+</text>
 
-  <text
-    x="600"
-    y="310"
-    text-anchor="middle"
-    font-family="Arial, sans-serif"
-    font-size="30"
-    font-weight="700"
-    fill="#ddd5dc"
-  >
-    ブロックされている数
-  </text>
+<text
+  x="600"
+  y="480"
+  text-anchor="middle"
+  font-family="Arial, sans-serif"
+  font-size="28"
+  font-weight="700"
+  fill="#c9c3ca"
+>
+人
+</text>
 
-  <!-- Number -->
-
-  <text
-    x="600"
-    y="425"
-    text-anchor="middle"
-    font-family="Arial, sans-serif"
-    font-size="105"
-    font-weight="900"
-    fill="url(#pinkGradient)"
-    filter="url(#shadow)"
-  >
-    ${safeBlocked}
-  </text>
-
-  <!-- Unit -->
-
-  <text
-    x="600"
-    y="480"
-    text-anchor="middle"
-    font-family="Arial, sans-serif"
-    font-size="28"
-    font-weight="700"
-    fill="#c9c3ca"
-  >
-    人
-  </text>
-
-  <!-- Footer -->
-
-  <text
-    x="600"
-    y="535"
-    text-anchor="middle"
-    font-family="Arial, sans-serif"
-    font-size="22"
-    font-weight="700"
-    fill="#77737b"
-  >
-    Xブロックチェッカーでチェックしました
-  </text>
+<text
+  x="600"
+  y="535"
+  text-anchor="middle"
+  font-family="Arial, sans-serif"
+  font-size="22"
+  font-weight="700"
+  fill="#77737b"
+>
+Xブロックチェッカーでチェックしました
+</text>
 
 </svg>
 `;
 
-  try {
-
-    const image =
-      await sharp(
-        Buffer.from(svg, "utf8")
-      )
-        .png({
-          compressionLevel: 9,
-          adaptiveFiltering: true
-        })
-        .toBuffer();
-
-    console.log(
-      "OGP PNG生成成功:",
-      image.length,
-      "bytes"
-    );
-
-    return image;
-
-  } catch (error) {
-
-    console.error(
-      "Sharp OGP画像生成エラー:",
-      error
-    );
-
-    throw error;
-  }
-
+  return sharp(
+    Buffer.from(svg)
+  )
+    .png()
+    .toBuffer();
 }
 
-/*
-=====================================================
-OGP Share Page
-=====================================================
-=====================================================
-*/
+// =====================================================
+// OGP共有ページ
+// =====================================================
 
 app.get(
   "/share",
@@ -909,8 +624,7 @@ app.get(
 
       if (
         !username ||
-        !isValidUsername(username) ||
-        !Number.isSafeInteger(blocked) ||
+        !Number.isFinite(blocked) ||
         blocked < 0
       ) {
 
@@ -926,41 +640,53 @@ app.get(
 
       const safeBlocked =
         escapeHtml(
-          blocked.toLocaleString("ja-JP")
+          blocked.toLocaleString(
+            "ja-JP"
+          )
         );
 
+      // リバースプロキシ環境でもHTTPSを優先
+      const protocol =
+        req.get("x-forwarded-proto") ||
+        req.protocol ||
+        "https";
+
+      const host =
+        req.get("host");
+
       const baseUrl =
-        getBaseUrl(req);
+        `${protocol}://${host}`;
 
-      /*
-      OGP URL
-      バージョン番号を追加してX側の古い画像キャッシュを回避
-      */
-
-      const imageUrl =
-        `${baseUrl}/ogp` +
-        `?username=${encodeURIComponent(username)}` +
-        `&blocked=${encodeURIComponent(blocked)}` +
-        `&v=${OGP_VERSION}`;
+      // OGPキャッシュ対策
+      const ogpVersion = "2";
 
       const shareUrl =
-        `${baseUrl}/share` +
-        `?username=${encodeURIComponent(username)}` +
-        `&blocked=${encodeURIComponent(blocked)}` +
-        `&v=${OGP_VERSION}`;
+        `${baseUrl}/share?username=` +
+        encodeURIComponent(username) +
+        `&blocked=` +
+        encodeURIComponent(blocked) +
+        `&v=${ogpVersion}`;
+
+      const imageUrl =
+        `${baseUrl}/ogp?username=` +
+        encodeURIComponent(username) +
+        `&blocked=` +
+        encodeURIComponent(blocked) +
+        `&v=${ogpVersion}`;
 
       res.set({
-        "Cache-Control":
-          "public, max-age=60, s-maxage=60",
 
-        "X-Content-Type-Options":
-          "nosniff"
+        "Cache-Control":
+          "public, max-age=60",
+
+        "X-Robots-Tag":
+          "noarchive"
+
       });
 
       res.type("html");
 
-      return res.send(`
-<!DOCTYPE html>
+      return res.send(`<!DOCTYPE html>
 <html lang="ja">
 
 <head>
@@ -970,7 +696,7 @@ app.get(
 <meta
   name="viewport"
   content="width=device-width, initial-scale=1.0"
-/>
+>
 
 <title>
 Xブロックチェッカー - 結果
@@ -1012,6 +738,11 @@ Xブロックチェッカー - 結果
 />
 
 <meta
+  property="og:image:secure_url"
+  content="${escapeHtml(imageUrl)}"
+/>
+
+<meta
   property="og:image:type"
   content="image/png"
 />
@@ -1024,6 +755,11 @@ Xブロックチェッカー - 結果
 <meta
   property="og:image:height"
   content="630"
+/>
+
+<meta
+  property="og:image:alt"
+  content="Xブロックチェッカーの結果"
 />
 
 <meta
@@ -1048,109 +784,69 @@ Xブロックチェッカー - 結果
 
 <meta
   name="twitter:image:alt"
-  content="Xブロックチェッカーの結果画像"
+  content="Xブロックチェッカーの結果"
 />
 
 <style>
 
 html,
-body {
-
-  margin: 0;
-  padding: 0;
-
-  min-height: 100%;
-
-  background: #09090d;
-  color: #ffffff;
-
+body{
+  margin:0;
+  min-height:100%;
+  background:#09090d;
+  color:#fff;
   font-family:
     -apple-system,
     BlinkMacSystemFont,
     "Noto Sans JP",
-    "Yu Gothic",
     sans-serif;
 }
 
-body {
-
-  display: flex;
-
-  align-items: center;
-  justify-content: center;
-
-  min-height: 100vh;
-
-  box-sizing: border-box;
-
-  padding: 20px;
+body{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:100vh;
 }
 
-.card {
-
-  width: min(90%, 620px);
-
-  padding: 35px;
-
-  box-sizing: border-box;
-
-  text-align: center;
-
-  background: #11111a;
-
-  border:
-    1px solid #ff4fa3;
-
-  border-radius: 28px;
-
+.card{
+  width:min(90%,620px);
+  padding:35px;
+  box-sizing:border-box;
+  text-align:center;
+  background:#11111a;
+  border:1px solid #ff4fa3;
+  border-radius:28px;
   box-shadow:
-    0 0 35px rgba(255, 0, 140, 0.15);
+    0 0 35px rgba(255,0,140,.15);
 }
 
-h1 {
-
-  margin:
-    0 0 20px;
-
-  color: #ff4fa3;
-
-  font-size: 28px;
+h1{
+  margin:0 0 20px;
+  color:#ff4fa3;
 }
 
-.user {
-
-  color: #ff9bc8;
-
-  font-size: 20px;
-
-  font-weight: 900;
+.user{
+  color:#ff9bc8;
+  font-size:20px;
+  font-weight:900;
 }
 
-.label {
-
-  margin-top: 30px;
-
-  color: #ddd5dc;
-
-  font-size: 18px;
+.label{
+  margin-top:30px;
+  color:#ddd5dc;
+  font-size:18px;
 }
 
-.count {
-
-  margin-top: 8px;
-
-  color: #ff4fa3;
-
-  font-size: 60px;
-
-  font-weight: 900;
+.count{
+  margin-top:8px;
+  color:#ff4fa3;
+  font-size:60px;
+  font-weight:1000;
 }
 
-.unit {
-
-  color: #c9c3ca;
-
-  font-size: 18px;
+.unit{
+  color:#c9c3ca;
 }
 
 </style>
@@ -1185,14 +881,13 @@ ${safeBlocked}
 
 </body>
 
-</html>
-`);
+</html>`);
 
     } catch (error) {
 
       console.error(
-        "OGP Share Page Error:",
-        error
+        "OGP share error:",
+        error.message
       );
 
       return res
@@ -1205,12 +900,9 @@ ${safeBlocked}
   }
 );
 
-/*
-=====================================================
-OGP PNG
-=====================================================
-=====================================================
-*/
+// =====================================================
+// OGP画像
+// =====================================================
 
 app.get(
   "/ogp",
@@ -1230,18 +922,9 @@ app.get(
 
       if (
         !username ||
-        !isValidUsername(username) ||
-        !Number.isSafeInteger(blocked) ||
+        !Number.isFinite(blocked) ||
         blocked < 0
       ) {
-
-        console.error(
-          "OGP Invalid Data:",
-          {
-            username,
-            blocked
-          }
-        );
 
         return res
           .status(400)
@@ -1250,82 +933,40 @@ app.get(
           );
       }
 
-      console.log(
-        "========================================"
-      );
-
-      console.log(
-        "OGP画像リクエスト"
-      );
-
-      console.log(
-        "Username:",
-        username
-      );
-
-      console.log(
-        "Blocked:",
-        blocked
-      );
-
       const image =
         await createOgpImage(
           username,
           blocked
         );
 
-      /*
-      重要:
-      XにPNG画像として認識させる
-      */
-
       res.status(200);
 
       res.set({
+
         "Content-Type":
           "image/png",
-
-        "Content-Disposition":
-          'inline; filename="x-block-checker.png"',
-
-        "Cache-Control":
-          "public, max-age=300, s-maxage=300",
 
         "Content-Length":
           String(image.length),
 
+        "Cache-Control":
+          "public, max-age=60",
+
         "X-Content-Type-Options":
-          "nosniff"
+          "nosniff",
+
+        "Content-Disposition":
+          "inline; filename=\"ogp.png\""
+
       });
-
-      console.log(
-        "OGP画像送信:",
-        image.length,
-        "bytes"
-      );
-
-      console.log(
-        "========================================"
-      );
 
       return res.end(image);
 
     } catch (error) {
 
       console.error(
-        "========================================"
-      );
-
-      console.error(
-        "OGP画像生成エラー:"
-      );
-
-      console.error(
-        error
-      );
-
-      console.error(
-        "========================================"
+        "OGP image generation error:",
+        error.message
       );
 
       return res
@@ -1338,11 +979,9 @@ app.get(
   }
 );
 
-/*
-=====================================================
-Telegram API
-=====================================================
-*/
+// =====================================================
+// Telegram API
+// =====================================================
 
 async function telegramApi(
   method,
@@ -1351,14 +990,13 @@ async function telegramApi(
 
   if (!TELEGRAM_BOT_TOKEN) {
 
-    throw new Error(
+    throw Error(
       "telegram_token_not_configured"
     );
   }
 
   const url =
-    `https://api.telegram.org/bot` +
-    `${TELEGRAM_BOT_TOKEN}/${method}`;
+    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
 
   const response =
     await fetch(
@@ -1388,12 +1026,7 @@ async function telegramApi(
 
   } catch {
 
-    console.error(
-      "Telegram JSON解析失敗:",
-      text
-    );
-
-    throw new Error(
+    throw Error(
       "telegram_invalid_response"
     );
   }
@@ -1408,20 +1041,17 @@ async function telegramApi(
       text
     );
 
-    throw new Error(
+    throw Error(
       "telegram_api_error"
     );
   }
 
   return data;
-
 }
 
-/*
-=====================================================
-Telegram Updates
-=====================================================
-*/
+// =====================================================
+// Telegram Chat ID自動取得
+// =====================================================
 
 async function receiveTelegramUpdates() {
 
@@ -1452,11 +1082,8 @@ async function receiveTelegramUpdates() {
       );
 
     if (
-      !Array.isArray(
-        data.result
-      )
+      !Array.isArray(data.result)
     ) {
-
       return;
     }
 
@@ -1464,14 +1091,8 @@ async function receiveTelegramUpdates() {
       const update of data.result
     ) {
 
-      if (
-        typeof update.update_id ===
-        "number"
-      ) {
-
-        telegramUpdateOffset =
-          update.update_id + 1;
-      }
+      telegramUpdateOffset =
+        update.update_id + 1;
 
       const message =
         update.message;
@@ -1480,7 +1101,6 @@ async function receiveTelegramUpdates() {
         !message ||
         !message.chat
       ) {
-
         continue;
       }
 
@@ -1518,19 +1138,14 @@ async function receiveTelegramUpdates() {
             }
           );
 
-          console.log(
-            "Telegram登録確認メッセージ送信成功"
-          );
-
         } catch (error) {
 
           console.error(
-            "Telegram登録確認送信失敗:",
+            "登録確認メッセージ送信失敗:",
             error.message
           );
         }
       }
-
     }
 
   } catch (error) {
@@ -1540,14 +1155,11 @@ async function receiveTelegramUpdates() {
       error.message
     );
   }
-
 }
 
-/*
-=====================================================
-Telegram Polling
-=====================================================
-*/
+// =====================================================
+// Telegram監視
+// =====================================================
 
 function startTelegramPolling() {
 
@@ -1555,33 +1167,28 @@ function startTelegramPolling() {
     "Telegram Chat ID自動取得を開始します"
   );
 
-  const poll =
-    async () => {
+  const poll = async () => {
 
-      await receiveTelegramUpdates();
+    await receiveTelegramUpdates();
 
-      setTimeout(
-        poll,
-        3000
-      );
-
-    };
+    setTimeout(
+      poll,
+      3000
+    );
+  };
 
   poll();
-
 }
 
-/*
-=====================================================
-Telegram Send
-=====================================================
-*/
+// =====================================================
+// Telegram送信
+// =====================================================
 
 async function sendTelegram(text) {
 
   if (!telegramChatId) {
 
-    throw new Error(
+    throw Error(
       "telegram_chat_id_not_received"
     );
   }
@@ -1590,47 +1197,35 @@ async function sendTelegram(text) {
     String(text)
       .slice(0, 3500);
 
-  const data =
-    await telegramApi(
-      "sendMessage",
-      {
-        chat_id:
-          telegramChatId,
+  await telegramApi(
+    "sendMessage",
+    {
+      chat_id:
+        telegramChatId,
 
-        text:
-          safeText,
+      text:
+        safeText,
 
-        disable_web_page_preview:
-          true
-      }
-    );
-
-  if (!data.ok) {
-
-    throw new Error(
-      "telegram_send_failed"
-    );
-  }
+      disable_web_page_preview:
+        true
+    }
+  );
 
   console.log(
     "Telegram送信成功"
   );
 
   return true;
-
-}
-
-/*
-=====================================================
-Telegram Status
-=====================================================
-*/
+      }
+// =====================================================
+// Telegram状態確認
+// =====================================================
 
 app.get(
   "/api/telegram/status",
   (req, res) => {
 
-    return res.json({
+    res.json({
 
       success: true,
 
@@ -1643,17 +1238,14 @@ app.get(
         Boolean(
           telegramChatId
         )
-
     });
 
   }
 );
 
-/*
-=====================================================
-X Check API
-=====================================================
-*/
+// =====================================================
+// XチェックAPI
+// =====================================================
 
 app.post(
   "/api/check",
@@ -1670,18 +1262,10 @@ app.post(
       const message =
         String(
           req.body?.message || ""
-        )
-          .trim();
-
-      /*
-      ---------------------------------------------
-      Input Validation
-      ---------------------------------------------
-      */
+        ).trim();
 
       if (
         !user ||
-        !isValidUsername(user) ||
         !message
       ) {
 
@@ -1693,12 +1277,6 @@ app.post(
           });
       }
 
-      /*
-      ---------------------------------------------
-      Get X Profile
-      ---------------------------------------------
-      */
-
       let profile;
 
       try {
@@ -1709,19 +1287,6 @@ app.post(
           );
 
       } catch (error) {
-
-        if (
-          error.code ===
-          "invalid_username"
-        ) {
-
-          return res
-            .status(400)
-            .json({
-              success: false,
-              error: "invalid_username"
-            });
-        }
 
         if (
           error.code ===
@@ -1739,61 +1304,26 @@ app.post(
         throw error;
       }
 
-      /*
-      ---------------------------------------------
-      Calculate
-      ---------------------------------------------
-      */
-
       const blocked =
         calc(
           user,
           profile.followers
         );
 
-      console.log(
-        "ブロック数計算:",
-        {
-          username:
-            profile.username,
-
-          followers:
-            profile.followers,
-
-          blocked
-        }
-      );
-
-      /*
-      ---------------------------------------------
-      Telegram
-      ---------------------------------------------
-      */
-
       const telegramText =
         `Xブロックチェッカー通知\n\n` +
-
         `フォロワー数\n` +
-        `${profile.followers.toLocaleString("ja-JP")}名\n\n` +
-
+        `${profile.followers.toLocaleString("ja-JP")}名\n` +
         `ユーザー名\n` +
-        `@${profile.username}\n\n` +
-
+        `@${profile.username}\n` +
         `ひと言メッセージ\n` +
         `${message}\n\n` +
-
         `ブロック数\n` +
         `${blocked.toLocaleString("ja-JP")}人`;
 
       await sendTelegram(
         telegramText
       );
-
-      /*
-      ---------------------------------------------
-      Response
-      ---------------------------------------------
-      */
 
       return res.json({
 
@@ -1809,20 +1339,8 @@ app.post(
     } catch (error) {
 
       console.error(
-        "========================================"
-      );
-
-      console.error(
         "APIエラー:",
         error.message
-      );
-
-      console.error(
-        error
-      );
-
-      console.error(
-        "========================================"
       );
 
       return res
@@ -1836,11 +1354,75 @@ app.post(
   }
 );
 
-/*
-=====================================================
-404
-=====================================================
-*/
+// =====================================================
+// OGPテスト用
+// ブラウザで /ogp-test にアクセスすると
+// 実際のPNG画像を確認できます
+// =====================================================
+
+app.get(
+  "/ogp-test",
+  async (req, res) => {
+
+    try {
+
+      const username =
+        norm(
+          req.query.username ||
+          "melody5530"
+        );
+
+      const blocked =
+        Number(
+          req.query.blocked || 5
+        );
+
+      const image =
+        await createOgpImage(
+          username,
+          blocked
+        );
+
+      res.status(200);
+
+      res.set({
+
+        "Content-Type":
+          "image/png",
+
+        "Content-Length":
+          String(image.length),
+
+        "Cache-Control":
+          "no-store",
+
+        "X-Content-Type-Options":
+          "nosniff"
+
+      });
+
+      return res.end(image);
+
+    } catch (error) {
+
+      console.error(
+        "OGP test error:",
+        error.message
+      );
+
+      return res
+        .status(500)
+        .send(
+          "OGP test error."
+        );
+    }
+
+  }
+);
+
+// =====================================================
+// 404
+// =====================================================
 
 app.use(
   (req, res) => {
@@ -1855,17 +1437,15 @@ app.use(
   }
 );
 
-/*
-=====================================================
-Global Error Handler
-=====================================================
-*/
+// =====================================================
+// エラー処理
+// =====================================================
 
 app.use(
   (error, req, res, next) => {
 
     console.error(
-      "Global Error:",
+      "Express error:",
       error
     );
 
@@ -1886,11 +1466,9 @@ app.use(
   }
 );
 
-/*
-=====================================================
-Server Start
-=====================================================
-*/
+// =====================================================
+// サーバー起動
+// =====================================================
 
 const server =
   app.listen(
@@ -1899,7 +1477,7 @@ const server =
     () => {
 
       console.log(
-        "========================================"
+        "===================================="
       );
 
       console.log(
@@ -1912,44 +1490,20 @@ const server =
       );
 
       console.log(
-        "HOST: 0.0.0.0"
+        "Host: 0.0.0.0"
       );
 
       console.log(
-        "Telegram Token:",
-        TELEGRAM_BOT_TOKEN
-          ? "設定済み"
-          : "未設定"
+        "Health: /health"
       );
 
       console.log(
-        "OGP Version:",
-        OGP_VERSION
+        "OGP Test: /ogp-test"
       );
 
       console.log(
-        "Health:",
-        "/health"
+        "===================================="
       );
-
-      console.log(
-        "Share:",
-        "/share"
-      );
-
-      console.log(
-        "OGP:",
-        "/ogp"
-      );
-
-      console.log(
-        "========================================"
-      );
-
-      /*
-      Telegram Tokenがある場合だけ
-      Chat ID取得を開始
-      */
 
       if (
         TELEGRAM_BOT_TOKEN
@@ -1959,20 +1513,17 @@ const server =
 
       } else {
 
-        console.error(
-          "TELEGRAM_BOT_TOKEN が未設定です。"
+        console.warn(
+          "TELEGRAM_BOT_TOKEN が未設定です"
         );
-
       }
 
     }
   );
 
-/*
-=====================================================
-Server Error
-=====================================================
-*/
+// =====================================================
+// サーバーエラー
+// =====================================================
 
 server.on(
   "error",
@@ -1983,47 +1534,53 @@ server.on(
       error
     );
 
-    if (
-      error.code ===
-      "EADDRINUSE"
-    ) {
-
-      console.error(
-        `PORT ${PORT} は既に使用されています。`
-      );
-
-    }
-
     process.exit(1);
-
   }
 );
 
-/*
-=====================================================
-Process Error
-=====================================================
-*/
+// =====================================================
+// 終了処理
+// =====================================================
 
 process.on(
-  "uncaughtException",
-  (error) => {
+  "SIGTERM",
+  () => {
 
-    console.error(
-      "uncaughtException:",
-      error
+    console.log(
+      "SIGTERMを受信しました"
+    );
+
+    server.close(
+      () => {
+
+        console.log(
+          "サーバーを終了しました"
+        );
+
+        process.exit(0);
+      }
     );
 
   }
 );
 
 process.on(
-  "unhandledRejection",
-  (reason) => {
+  "SIGINT",
+  () => {
 
-    console.error(
-      "unhandledRejection:",
-      reason
+    console.log(
+      "SIGINTを受信しました"
+    );
+
+    server.close(
+      () => {
+
+        console.log(
+          "サーバーを終了しました"
+        );
+
+        process.exit(0);
+      }
     );
 
   }
