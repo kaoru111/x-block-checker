@@ -2,7 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const rateLimit = require("express-rate-limit");
-const { createCanvas } = require("@napi-rs/canvas");
+const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
 
 const app = express();
 
@@ -11,6 +11,48 @@ const PORT = Number(
 );
 
 app.set("trust proxy", 1);
+
+// =====================================================
+// フォントの動的ロード（文字化け対策）
+// =====================================================
+
+let fontLoaded = false;
+
+async function loadJapaneseFont() {
+
+  if (fontLoaded) return;
+
+  try {
+
+    console.log("日本語フォントの読み込みを開始します...");
+
+    const fontUrl =
+      "https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-jp@latest/japanese-400-normal.ttf";
+
+    const res = await fetch(fontUrl);
+
+    if (!res.ok) {
+      throw new Error("フォントの取得に失敗しました: " + res.status);
+    }
+
+    const arrayBuffer = await res.arrayBuffer();
+    const fontBuffer = Buffer.from(arrayBuffer);
+
+    GlobalFonts.register(fontBuffer, "NotoSansJP");
+    fontLoaded = true;
+
+    console.log("日本語フォント(NotoSansJP)の登録が完了しました。");
+
+  } catch (error) {
+
+    console.error("フォント読み込みエラー:", error.message);
+
+  }
+
+}
+
+// サーバー起動時にフォント取得を開始
+loadJapaneseFont();
 
 // =====================================================
 // Telegram
@@ -347,7 +389,7 @@ async function getPublicXProfile(user) {
 }
 
 // =====================================================
-// OGP画像生成（Canvasで文字化けを完全防ぐ）
+// OGP画像生成（日本語フォント完全固定）
 // =====================================================
 
 async function createOgpImage(
@@ -355,8 +397,12 @@ async function createOgpImage(
   blocked
 ) {
 
+  await loadJapaneseFont();
+
   const canvas = createCanvas(1200, 630);
   const ctx = canvas.getContext("2d");
+
+  const fontFamily = fontLoaded ? '"NotoSansJP", sans-serif' : 'sans-serif';
 
   // 背景グラデーション
   const bgGrad = ctx.createLinearGradient(0, 0, 1200, 630);
@@ -386,17 +432,16 @@ async function createOgpImage(
 
   // タイトル
   ctx.fillStyle = "#ff5ca9";
-  ctx.font = "bold 60px sans-serif";
+  ctx.font = `bold 60px ${fontFamily}`;
   ctx.fillText("Xブロックチェッカー", 600, 150);
-
   // ユーザー名
   ctx.fillStyle = "#ff9bc8";
-  ctx.font = "bold 32px sans-serif";
+  ctx.font = `bold 32px ${fontFamily}`;
   ctx.fillText("@" + norm(username), 600, 225);
 
   // ブロックされている数ラベル
   ctx.fillStyle = "#ddd5dc";
-  ctx.font = "bold 28px sans-serif";
+  ctx.font = `bold 28px ${fontFamily}`;
   ctx.fillText("ブロックされている数", 600, 310);
 
   // 数字 (ピンクグラデーション)
@@ -404,17 +449,17 @@ async function createOgpImage(
   pinkGrad.addColorStop(0, "#ff4fa3");
   pinkGrad.addColorStop(1, "#a72cff");
   ctx.fillStyle = pinkGrad;
-  ctx.font = "900 110px sans-serif";
+  ctx.font = `900 110px ${fontFamily}`;
   ctx.fillText(Number(blocked || 0).toLocaleString("ja-JP"), 600, 425);
 
   // 単位
   ctx.fillStyle = "#c9c3ca";
-  ctx.font = "bold 28px sans-serif";
+  ctx.font = `bold 28px ${fontFamily}`;
   ctx.fillText("人", 600, 480);
 
   // フッターテキスト
   ctx.fillStyle = "#77737b";
-  ctx.font = "bold 22px sans-serif";
+  ctx.font = `bold 22px ${fontFamily}`;
   ctx.fillText("Xブロックチェッカーでチェックしました", 600, 535);
 
   return canvas.toBuffer("image/png");
