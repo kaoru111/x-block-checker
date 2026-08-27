@@ -10,6 +10,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "express": "^4.21.2",
     "express-rate-limit": "^8.6.2",
     "sharp": "^0.34.3"
