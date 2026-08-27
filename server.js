@@ -2,7 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
 const rateLimit = require("express-rate-limit");
-const sharp = require("sharp");
+const { createCanvas } = require("@napi-rs/canvas");
 
 const app = express();
 
@@ -93,21 +93,6 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-
-}
-
-// =====================================================
-// SVGエスケープ
-// =====================================================
-
-function escapeSvg(value) {
-
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
 
 }
 
@@ -250,10 +235,6 @@ async function getPublicXProfile(user) {
 
   let followers = null;
 
-  // ---------------------------------------------------
-  // パターン1
-  // ---------------------------------------------------
-
   const match1 =
     html.match(
       /"followers_count"\s*:\s*(\d+)/i
@@ -264,16 +245,7 @@ async function getPublicXProfile(user) {
     followers =
       Number(match1[1]);
 
-    console.log(
-      "フォロワー数取得成功 pattern1:",
-      followers
-    );
-
   }
-
-  // ---------------------------------------------------
-  // パターン2
-  // ---------------------------------------------------
 
   if (followers === null) {
 
@@ -287,18 +259,9 @@ async function getPublicXProfile(user) {
       followers =
         Number(match2[1]);
 
-      console.log(
-        "フォロワー数取得成功 pattern2:",
-        followers
-      );
-
     }
 
   }
-
-  // ---------------------------------------------------
-  // パターン3
-  // ---------------------------------------------------
 
   if (followers === null) {
 
@@ -312,18 +275,9 @@ async function getPublicXProfile(user) {
       followers =
         Number(match3[1]);
 
-      console.log(
-        "フォロワー数取得成功 pattern3:",
-        followers
-      );
-
     }
 
   }
-
-  // ---------------------------------------------------
-  // パターン4
-  // ---------------------------------------------------
 
   if (followers === null) {
 
@@ -365,11 +319,6 @@ async function getPublicXProfile(user) {
         followers =
           number;
 
-        console.log(
-          "フォロワー数取得成功:",
-          followers
-        );
-
         break;
 
       }
@@ -383,10 +332,6 @@ async function getPublicXProfile(user) {
     !Number.isSafeInteger(followers) ||
     followers < 0
   ) {
-
-    console.error(
-      "Xページからフォロワー数を取得できませんでした。"
-    );
 
     throw Error(
       "public follower count unavailable"
@@ -402,7 +347,7 @@ async function getPublicXProfile(user) {
 }
 
 // =====================================================
-// OGP画像生成（文字化け完全防止版）
+// OGP画像生成（Canvasで文字化けを完全防ぐ）
 // =====================================================
 
 async function createOgpImage(
@@ -410,123 +355,69 @@ async function createOgpImage(
   blocked
 ) {
 
-  const safeUsername =
-    escapeSvg(
-      "@" + norm(username)
-    );
+  const canvas = createCanvas(1200, 630);
+  const ctx = canvas.getContext("2d");
 
-  const safeBlocked =
-    escapeSvg(
-      Number(blocked || 0)
-        .toLocaleString("en-US")
-    );
+  // 背景グラデーション
+  const bgGrad = ctx.createLinearGradient(0, 0, 1200, 630);
+  bgGrad.addColorStop(0, "#08080d");
+  bgGrad.addColorStop(0.5, "#171020");
+  bgGrad.addColorStop(1, "#08080d");
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, 1200, 630);
 
-  // フォント依存を排除するための軽量埋め込み用レイアウト
-  const svg = `
-<svg
-  width="1200"
-  height="630"
-  viewBox="0 0 1200 630"
-  xmlns="http://www.w3.org/2000/svg"
->
+  // 外枠カード
+  ctx.fillStyle = "#11111a";
+  ctx.strokeStyle = "#ff4fa3";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(35, 35, 1130, 560, 35);
+  ctx.fill();
+  ctx.stroke();
 
-<defs>
+  // 内枠線
+  ctx.strokeStyle = "rgba(255, 79, 163, 0.22)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(55, 55, 1090, 520, 27);
+  ctx.stroke();
 
-<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-  <stop offset="0%" stop-color="#08080d"/>
-  <stop offset="50%" stop-color="#171020"/>
-  <stop offset="100%" stop-color="#08080d"/>
-</linearGradient>
+  ctx.textAlign = "center";
 
-<linearGradient id="pink" x1="0" y1="0" x2="1" y2="1">
-  <stop offset="0%" stop-color="#ff4fa3"/>
-  <stop offset="100%" stop-color="#a72cff"/>
-</linearGradient>
+  // タイトル
+  ctx.fillStyle = "#ff5ca9";
+  ctx.font = "bold 60px sans-serif";
+  ctx.fillText("Xブロックチェッカー", 600, 150);
 
-<filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-  <feGaussianBlur stdDeviation="12" result="blur"/>
-  <feMerge>
-    <feMergeNode in="blur"/>
-    <feMergeNode in="SourceGraphic"/>
-  </feMerge>
-</filter>
+  // ユーザー名
+  ctx.fillStyle = "#ff9bc8";
+  ctx.font = "bold 32px sans-serif";
+  ctx.fillText("@" + norm(username), 600, 225);
 
-</defs>
+  // ブロックされている数ラベル
+  ctx.fillStyle = "#ddd5dc";
+  ctx.font = "bold 28px sans-serif";
+  ctx.fillText("ブロックされている数", 600, 310);
 
-<rect width="1200" height="630" fill="url(#bg)"/>
+  // 数字 (ピンクグラデーション)
+  const pinkGrad = ctx.createLinearGradient(0, 320, 0, 450);
+  pinkGrad.addColorStop(0, "#ff4fa3");
+  pinkGrad.addColorStop(1, "#a72cff");
+  ctx.fillStyle = pinkGrad;
+  ctx.font = "900 110px sans-serif";
+  ctx.fillText(Number(blocked || 0).toLocaleString("ja-JP"), 600, 425);
 
-<rect
-  x="35"
-  y="35"
-  width="1130"
-  height="560"
-  rx="35"
-  fill="#11111a"
-  stroke="#ff4fa3"
-  stroke-width="3"
-/>
+  // 単位
+  ctx.fillStyle = "#c9c3ca";
+  ctx.font = "bold 28px sans-serif";
+  ctx.fillText("人", 600, 480);
 
-<rect
-  x="55"
-  y="55"
-  width="1090"
-  height="520"
-  rx="27"
-  fill="none"
-  stroke="#ff4fa3"
-  stroke-opacity="0.22"
-  stroke-width="2"
-/>
+  // フッターテキスト
+  ctx.fillStyle = "#77737b";
+  ctx.font = "bold 22px sans-serif";
+  ctx.fillText("Xブロックチェッカーでチェックしました", 600, 535);
 
-<!-- 英数字（ユーザー名・ブロック数） -->
-<text
-  x="600"
-  y="225"
-  text-anchor="middle"
-  font-family="sans-serif, Arial"
-  font-size="32"
-  font-weight="700"
-  fill="#ff9bc8"
->
-${safeUsername}
-</text>
-
-<text
-  x="600"
-  y="425"
-  text-anchor="middle"
-  font-family="sans-serif, Arial"
-  font-size="110"
-  font-weight="900"
-  fill="url(#pink)"
-  filter="url(#glow)"
->
-${safeBlocked}
-</text>
-
-</svg>
-`;
-
-  // パス描画した日本語要素（タイトル、説明テキストなど）
-  const labelsOverlay = Buffer.from(`
-<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
-  <style>
-    .t { font-family: sans-serif; font-weight: bold; fill: #ff5ca9; font-size: 55px; }
-    .sub { font-family: sans-serif; fill: #ddd5dc; font-size: 26px; }
-    .unit { font-family: sans-serif; fill: #c9c3ca; font-size: 28px; }
-    .ft { font-family: sans-serif; fill: #77737b; font-size: 20px; }
-  </style>
-  <text x="600" y="145" text-anchor="middle" class="t">X BLOCK CHECKER</text>
-  <text x="600" y="305" text-anchor="middle" class="sub">BLOCKED COUNT</text>
-  <text x="600" y="475" text-anchor="middle" class="unit">USERS</text>
-  <text x="600" y="535" text-anchor="middle" class="ft">Checked with X Block Checker</text>
-</svg>
-`);
-
-  return sharp(Buffer.from(svg))
-    .composite([{ input: labelsOverlay }])
-    .png()
-    .toBuffer();
+  return canvas.toBuffer("image/png");
 
 }
 
@@ -1065,10 +956,6 @@ async function receiveTelegramUpdates() {
 
   if (!TELEGRAM_BOT_TOKEN) {
 
-    console.error(
-      "TELEGRAM_BOT_TOKEN が設定されていません"
-    );
-
     return;
 
   }
@@ -1123,11 +1010,6 @@ async function receiveTelegramUpdates() {
 
       telegramChatId =
         message.chat.id;
-
-      console.log(
-        "Telegram Chat IDを自動取得:",
-        String(telegramChatId)
-      );
 
       const text =
         String(
@@ -1187,10 +1069,6 @@ async function receiveTelegramUpdates() {
 
 function startTelegramPolling() {
 
-  console.log(
-    "Telegram Chat ID自動取得を開始します"
-  );
-
   const poll =
     async () => {
 
@@ -1243,10 +1121,6 @@ async function sendTelegram(text) {
     }
   );
 
-  console.log(
-    "Telegram送信成功"
-  );
-
   return true;
 
 }
@@ -1277,6 +1151,7 @@ app.get(
 
   }
 );
+
 // =====================================================
 // XチェックAPI
 // =====================================================
