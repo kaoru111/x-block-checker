@@ -1,19 +1,15 @@
 {
   "name": "x-block-checker",
   "version": "1.0.0",
-  "private": true,
+  "description": "X Block Checker",
   "main": "server.js",
   "scripts": {
     "build": "apt-get update && apt-get install -y fonts-noto-cjk",
     "start": "node server.js"
   },
-  "engines": {
-    "node": ">=18"
-  },
   "dependencies": {
-    "@resvg/resvg-js": "^2.6.2",
-    "express": "^4.21.2",
-    "express-rate-limit": "^8.6.2",
-    "sharp": "^0.34.3"
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "sharp": "^0.33.3"
   }
 }
