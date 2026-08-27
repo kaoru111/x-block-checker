@@ -3,15 +3,20 @@ const crypto = require("crypto");
 const path = require("path");
 const rateLimit = require("express-rate-limit");
 const sharp = require("sharp");
-const { Resvg } = require("@resvg/resvg-js");
 
 const app = express();
 
-const PORT = Number(
-  process.env.PORT || 3000
-);
+const PORT = Number(process.env.PORT || 3000);
 
 app.set("trust proxy", 1);
+
+// =====================================================
+// 公開URL
+// =====================================================
+
+const PUBLIC_URL =
+  process.env.PUBLIC_URL ||
+  "https://coast-infamous-hamster.abasthan.app";
 
 // =====================================================
 // Telegram
@@ -24,82 +29,18 @@ let telegramChatId = null;
 let telegramUpdateOffset = 0;
 
 // =====================================================
-// OGP用 日本語フォント
-// =====================================================
-
-// Google FontsのNoto Sans JP
-// サーバー起動時に取得してメモリへ保存します。
-
-const JAPANESE_FONT_URL =
-  "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf";
-
-let japaneseFontBuffer = null;
-
-async function loadJapaneseFont() {
-
-  try {
-
-    console.log(
-      "日本語フォント取得開始..."
-    );
-
-    const response =
-      await fetch(
-        JAPANESE_FONT_URL
-      );
-
-    if (!response.ok) {
-
-      throw new Error(
-        "font_http_" +
-        response.status
-      );
-    }
-
-    const arrayBuffer =
-      await response.arrayBuffer();
-
-    japaneseFontBuffer =
-      Buffer.from(arrayBuffer);
-
-    console.log(
-      "日本語フォント取得成功:",
-      japaneseFontBuffer.length,
-      "bytes"
-    );
-
-  } catch (error) {
-
-    japaneseFontBuffer = null;
-
-    console.error(
-      "日本語フォント取得失敗:",
-      error.message
-    );
-  }
-}
-
-// =====================================================
 // Rate Limit
 // =====================================================
 
 const limiter = rateLimit({
-
-  windowMs:
-    15 * 60 * 1000,
-
+  windowMs: 15 * 60 * 1000,
   max: 30,
-
   standardHeaders: true,
-
   legacyHeaders: false,
-
   message: {
     success: false,
-    error:
-      "rate_limit_exceeded"
+    error: "rate_limit_exceeded"
   }
-
 });
 
 // =====================================================
@@ -113,71 +54,40 @@ app.use(
 );
 
 app.use(
+  express.urlencoded({
+    extended: false,
+    limit: "20kb"
+  })
+);
+
+app.use(
   express.static(
-    path.join(
-      __dirname,
-      "public"
-    )
+    path.join(__dirname, "public")
   )
 );
 
 // =====================================================
-// トップページ
+// 正規化
 // =====================================================
 
-app.get(
-  "/",
-  (req, res) => {
-
-    res.sendFile(
-      path.join(
-        __dirname,
-        "x_block_checker_preview.html"
-      )
-    );
-
-  }
-);
-
-// =====================================================
-// ユーザー名正規化
-// =====================================================
-
-const norm = (v) =>
-
-  String(v || "")
+function norm(value) {
+  return String(value || "")
     .trim()
     .replace(/^@+/, "")
     .replace(/\s/g, "");
+}
 
 // =====================================================
 // HTMLエスケープ
 // =====================================================
 
 function escapeHtml(value) {
-
   return String(value || "")
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
-
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 // =====================================================
@@ -185,87 +95,63 @@ function escapeHtml(value) {
 // =====================================================
 
 function escapeSvg(value) {
-
   return String(value || "")
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&apos;"
-    );
-
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 // =====================================================
 // 同じユーザー名なら同じブロック数
 // =====================================================
 
-function calc(
-  user,
-  followers
-) {
+function calc(user, followers) {
 
-  const h =
-    crypto
-      .createHash("sha256")
-      .update(
-        norm(user).toLowerCase(),
-        "utf8"
-      )
-      .digest();
+  const hash = crypto
+    .createHash("sha256")
+    .update(
+      norm(user).toLowerCase(),
+      "utf8"
+    )
+    .digest();
 
   const seed =
-    h.readUInt32BE(0) /
+    hash.readUInt32BE(0) /
     0xffffffff;
 
   const max =
     Math.floor(
-      followers * 0.05
+      Number(followers) * 0.05
     );
 
   return Math.floor(
     seed * (max + 1)
   );
-
 }
 
 // =====================================================
 // X公開ページ取得
 // =====================================================
 
-async function getPublicXProfile(
-  user
-) {
+async function getPublicXProfile(user) {
 
-  const username =
-    norm(user);
+  const username = norm(user);
 
   if (!username) {
+    const error =
+      new Error("empty_username");
 
-    throw Error(
-      "empty_username"
-    );
+    error.code =
+      "user_not_found";
 
+    throw error;
   }
 
   const xUrl =
-    `https://x.com/${encodeURIComponent(
-      username
-    )}`;
+    "https://x.com/" +
+    encodeURIComponent(username);
 
   console.log(
     "Xプロフィール取得開始:",
@@ -277,11 +163,8 @@ async function getPublicXProfile(
       xUrl,
       {
         method: "GET",
-
         redirect: "follow",
-
         headers: {
-
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
 
@@ -296,9 +179,7 @@ async function getPublicXProfile(
 
           "Pragma":
             "no-cache"
-
         }
-
       }
     );
 
@@ -307,29 +188,22 @@ async function getPublicXProfile(
     response.status
   );
 
-  if (
-    response.status === 404
-  ) {
+  if (response.status === 404) {
 
     const error =
-      new Error(
-        "X user not found"
-      );
+      new Error("X user not found");
 
     error.code =
       "user_not_found";
 
     throw error;
-
   }
 
   if (!response.ok) {
-
-    throw Error(
+    throw new Error(
       "X HTTP " +
       response.status
     );
-
   }
 
   const html =
@@ -342,44 +216,27 @@ async function getPublicXProfile(
   );
 
   if (
-
-    /this account doesn't exist/i.test(
-      html
-    ) ||
-
-    /this account doesn.t exist/i.test(
-      html
-    ) ||
-
-    /page doesn.t exist/i.test(
-      html
-    ) ||
-
-    /account suspended/i.test(
-      html
-    ) ||
-
-    /account is suspended/i.test(
-      html
-    )
-
+    /this account doesn't exist/i.test(html) ||
+    /this account doesn.t exist/i.test(html) ||
+    /page doesn.t exist/i.test(html) ||
+    /account suspended/i.test(html) ||
+    /account is suspended/i.test(html)
   ) {
 
     const error =
-      new Error(
-        "X user not found"
-      );
+      new Error("X user not found");
 
     error.code =
       "user_not_found";
 
     throw error;
-
   }
 
   let followers = null;
 
-  // pattern 1
+  // ---------------------------------------------------
+  // パターン1
+  // ---------------------------------------------------
 
   const match1 =
     html.match(
@@ -389,22 +246,19 @@ async function getPublicXProfile(
   if (match1) {
 
     followers =
-      Number(
-        match1[1]
-      );
+      Number(match1[1]);
 
     console.log(
-      "フォロワー数取得成功 pattern1:",
+      "フォロワー数取得 pattern1:",
       followers
     );
-
   }
 
-  // pattern 2
+  // ---------------------------------------------------
+  // パターン2
+  // ---------------------------------------------------
 
-  if (
-    followers === null
-  ) {
+  if (followers === null) {
 
     const match2 =
       html.match(
@@ -414,24 +268,20 @@ async function getPublicXProfile(
     if (match2) {
 
       followers =
-        Number(
-          match2[1]
-        );
+        Number(match2[1]);
 
       console.log(
-        "フォロワー数取得成功 pattern2:",
+        "フォロワー数取得 pattern2:",
         followers
       );
-
     }
-
   }
 
-  // pattern 3
+  // ---------------------------------------------------
+  // パターン3
+  // ---------------------------------------------------
 
-  if (
-    followers === null
-  ) {
+  if (followers === null) {
 
     const match3 =
       html.match(
@@ -441,26 +291,22 @@ async function getPublicXProfile(
     if (match3) {
 
       followers =
-        Number(
-          match3[1]
-        );
+        Number(match3[1]);
 
       console.log(
-        "フォロワー数取得成功 pattern3:",
+        "フォロワー数取得 pattern3:",
         followers
       );
-
     }
-
   }
 
-  // pattern 4
+  // ---------------------------------------------------
+  // パターン4
+  // ---------------------------------------------------
 
-  if (
-    followers === null
-  ) {
+  if (followers === null) {
 
-    const followerPatterns = [
+    const patterns = [
 
       /([\d,.\s]+)\s+Followers\b/i,
 
@@ -469,98 +315,67 @@ async function getPublicXProfile(
       /Followers\s*[:：]\s*([\d,.\s]+)/i,
 
       /フォロワー\s*[:：]\s*([\d,.\s]+)/i
-
     ];
 
     for (
-      const pattern
-      of followerPatterns
+      const pattern of patterns
     ) {
 
       const match =
-        html.match(
-          pattern
-        );
+        html.match(pattern);
 
       if (!match) {
-
         continue;
-
       }
 
       const cleaned =
         match[1]
-          .replace(
-            /[,\s.]/g,
-            ""
-          );
+          .replace(/[,\s.]/g, "");
 
       const number =
-        Number(
-          cleaned
-        );
+        Number(cleaned);
 
       if (
-
-        Number.isSafeInteger(
-          number
-        ) &&
-
+        Number.isSafeInteger(number) &&
         number >= 0
-
       ) {
 
         followers =
           number;
 
         console.log(
-          "フォロワー数取得成功:",
+          "フォロワー数取得:",
           followers
         );
 
         break;
-
       }
-
     }
-
   }
 
   if (
-
     followers === null ||
-
-    !Number.isSafeInteger(
-      followers
-    ) ||
-
+    !Number.isSafeInteger(followers) ||
     followers < 0
-
   ) {
 
     console.error(
-      "Xページからフォロワー数を取得できませんでした。"
+      "フォロワー数を取得できませんでした"
     );
 
-    throw Error(
+    throw new Error(
       "public follower count unavailable"
     );
-
   }
 
   return {
-
     username,
-
     followers
-
   };
-
 }
 
 // =====================================================
 // OGP画像生成
-// 日本語フォント対応版
 // =====================================================
 
 async function createOgpImage(
@@ -570,17 +385,13 @@ async function createOgpImage(
 
   const safeUsername =
     escapeSvg(
-      "@" +
-      norm(username)
+      "@" + norm(username)
     );
 
   const safeBlocked =
     escapeSvg(
-      Number(
-        blocked || 0
-      ).toLocaleString(
-        "ja-JP"
-      )
+      Number(blocked || 0)
+        .toLocaleString("ja-JP")
     );
 
   const svg = `
@@ -591,243 +402,705 @@ async function createOgpImage(
   xmlns="http://www.w3.org/2000/svg"
 >
 
-  <defs>
+<defs>
 
-    <linearGradient
-      id="bg"
-      x1="0"
-      y1="0"
-      x2="1"
-      y2="1"
-    >
+<linearGradient
+  id="bg"
+  x1="0"
+  y1="0"
+  x2="1"
+  y2="1"
+>
 
-      <stop
-        offset="0%"
-        stop-color="#08080d"
-      />
+<stop
+  offset="0%"
+  stop-color="#08080d"
+/>
 
-      <stop
-        offset="50%"
-        stop-color="#171020"
-      />
+<stop
+  offset="50%"
+  stop-color="#171020"
+/>
 
-      <stop
-        offset="100%"
-        stop-color="#08080d"
-      />
+<stop
+  offset="100%"
+  stop-color="#08080d"
+/>
 
-    </linearGradient>
+</linearGradient>
 
-    <linearGradient
-      id="pink"
-      x1="0"
-      y1="0"
-      x2="1"
-      y2="1"
-    >
+<linearGradient
+  id="pink"
+  x1="0"
+  y1="0"
+  x2="1"
+  y2="1"
+>
 
-      <stop
-        offset="0%"
-        stop-color="#ff4fa3"
-      />
+<stop
+  offset="0%"
+  stop-color="#ff4fa3"
+/>
 
-      <stop
-        offset="100%"
-        stop-color="#a72cff"
-      />
+<stop
+  offset="100%"
+  stop-color="#a72cff"
+/>
 
-    </linearGradient>
+</linearGradient>
 
-    <filter
-      id="glow"
-      x="-50%"
-      y="-50%"
-      width="200%"
-      height="200%"
-    >
+<filter
+  id="glow"
+  x="-50%"
+  y="-50%"
+  width="200%"
+  height="200%"
+>
 
-      <feGaussianBlur
-        stdDeviation="12"
-        result="blur"
-      />
+<feGaussianBlur
+  stdDeviation="12"
+  result="blur"
+/>
 
-      <feMerge>
+<feMerge>
 
-        <feMergeNode
-          in="blur"
-        />
+<feMergeNode
+  in="blur"
+/>
 
-        <feMergeNode
-          in="SourceGraphic"
-        />
+<feMergeNode
+  in="SourceGraphic"
+/>
 
-      </feMerge>
+</feMerge>
 
-    </filter>
+</filter>
 
-  </defs>
+</defs>
 
-  <rect
-    width="1200"
-    height="630"
-    fill="url(#bg)"
-  />
+<rect
+  width="1200"
+  height="630"
+  fill="url(#bg)"
+/>
 
-  <rect
-    x="35"
-    y="35"
-    width="1130"
-    height="560"
-    rx="35"
-    fill="#11111a"
-    stroke="#ff4fa3"
-    stroke-width="3"
-  />
+<rect
+  x="35"
+  y="35"
+  width="1130"
+  height="560"
+  rx="35"
+  fill="#11111a"
+  stroke="#ff4fa3"
+  stroke-width="3"
+/>
 
-  <rect
-    x="55"
-    y="55"
-    width="1090"
-    height="520"
-    rx="27"
-    fill="none"
-    stroke="#ff4fa3"
-    stroke-opacity="0.22"
-    stroke-width="2"
-  />
+<rect
+  x="55"
+  y="55"
+  width="1090"
+  height="520"
+  rx="27"
+  fill="none"
+  stroke="#ff4fa3"
+  stroke-opacity="0.22"
+  stroke-width="2"
+/>
 
-  <text
-    x="600"
-    y="150"
-    text-anchor="middle"
-    font-family="Noto Sans JP"
-    font-size="62"
-    font-weight="900"
-    fill="#ff5ca9"
-  >
-    Xブロックチェッカー
-  </text>
+<text
+  x="600"
+  y="150"
+  text-anchor="middle"
+  font-family="sans-serif"
+  font-size="62"
+  font-weight="900"
+  fill="#ff5ca9"
+>
+Xブロックチェッカー
+</text>
 
-  <text
-    x="600"
-    y="225"
-    text-anchor="middle"
-    font-family="Noto Sans JP"
-    font-size="30"
-    font-weight="700"
-    fill="#ff9bc8"
-  >
-    ${safeUsername}
-  </text>
+<text
+  x="600"
+  y="225"
+  text-anchor="middle"
+  font-family="sans-serif"
+  font-size="30"
+  font-weight="700"
+  fill="#ff9bc8"
+>
+${safeUsername}
+</text>
 
-  <text
-    x="600"
-    y="310"
-    text-anchor="middle"
-    font-family="Noto Sans JP"
-    font-size="28"
-    font-weight="700"
-    fill="#ddd5dc"
-  >
-    ブロックされている数
-  </text>
+<text
+  x="600"
+  y="310"
+  text-anchor="middle"
+  font-family="sans-serif"
+  font-size="28"
+  font-weight="700"
+  fill="#ddd5dc"
+>
+ブロックされている数
+</text>
 
-  <text
-    x="600"
-    y="425"
-    text-anchor="middle"
-    font-family="Noto Sans JP"
-    font-size="105"
-    font-weight="900"
-    fill="url(#pink)"
-    filter="url(#glow)"
-  >
-    ${safeBlocked}
-  </text>
+<text
+  x="600"
+  y="425"
+  text-anchor="middle"
+  font-family="sans-serif"
+  font-size="105"
+  font-weight="900"
+  fill="url(#pink)"
+  filter="url(#glow)"
+>
+${safeBlocked}
+</text>
 
-  <text
-    x="600"
-    y="480"
-    text-anchor="middle"
-    font-family="Noto Sans JP"
-    font-size="28"
-    font-weight="700"
-    fill="#c9c3ca"
-  >
-    人
-  </text>
+<text
+  x="600"
+  y="480"
+  text-anchor="middle"
+  font-family="sans-serif"
+  font-size="28"
+  font-weight="700"
+  fill="#c9c3ca"
+>
+人
+</text>
 
-  <text
-    x="600"
-    y="535"
-    text-anchor="middle"
-    font-family="Noto Sans JP"
-    font-size="22"
-    font-weight="700"
-    fill="#77737b"
-  >
-    Xブロックチェッカーでチェックしました
-  </text>
+<text
+  x="600"
+  y="535"
+  text-anchor="middle"
+  font-family="sans-serif"
+  font-size="22"
+  font-weight="700"
+  fill="#77737b"
+>
+Xブロックチェッカーでチェックしました
+</text>
 
 </svg>
 `;
-
-  // 日本語フォントが取得できている場合
-  // resvgでカスタムフォントとして使用
-
-  if (
-    japaneseFontBuffer
-  ) {
-
-    const resvg =
-      new Resvg(
-        svg,
-        {
-
-          font: {
-
-            fontBuffers: [
-              japaneseFontBuffer
-            ],
-
-            loadSystemFonts:
-              false,
-
-            defaultFontFamily:
-              "Noto Sans JP",
-
-            sansSerifFamily:
-              "Noto Sans JP"
-
-          }
-
-        }
-      );
-
-    const png =
-      resvg
-        .render()
-        .asPng();
-
-    return png;
-
-  }
-
-  // フォント取得失敗時の予備処理
-
-  console.error(
-    "日本語フォントがないためSharpで生成します"
-  );
 
   return sharp(
     Buffer.from(svg)
   )
     .png()
     .toBuffer();
+}
+
+// =====================================================
+// OGP画像
+// =====================================================
+
+app.get(
+  "/ogp",
+  async (req, res) => {
+
+    try {
+
+      const username =
+        norm(
+          req.query.username
+        );
+
+      const blocked =
+        Number(
+          req.query.blocked
+        );
+
+      if (
+        !username ||
+        !Number.isFinite(blocked) ||
+        blocked < 0
+      ) {
+
+        return res
+          .status(400)
+          .send(
+            "Invalid OGP data."
+          );
+      }
+
+      const image =
+        await createOgpImage(
+          username,
+          blocked
+        );
+
+      res.status(200);
+
+      res.set({
+        "Content-Type":
+          "image/png",
+
+        "Cache-Control":
+          "public, max-age=300, must-revalidate",
+
+        "Content-Length":
+          String(image.length)
+      });
+
+      return res.end(image);
+
+    } catch (error) {
+
+      console.error(
+        "OGP image error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .send(
+          "OGP image error."
+        );
+    }
+  }
+);
+//
+// server.js 2/2
+//
+
+// =====================================================
+// TOPページ
+// =====================================================
+
+app.get("/", (req, res) => {
+
+  const filePath =
+    path.join(
+      __dirname,
+      "x_block_checker_preview.html"
+    );
+
+  return res.sendFile(filePath);
+
+});
+
+// =====================================================
+// Telegram API
+// =====================================================
+
+async function telegramApi(
+  method,
+  body = {}
+) {
+
+  if (!TELEGRAM_BOT_TOKEN) {
+
+    throw new Error(
+      "telegram_token_not_configured"
+    );
+
+  }
+
+  const url =
+    `https://api.telegram.org/bot` +
+    `${TELEGRAM_BOT_TOKEN}/${method}`;
+
+  const response =
+    await fetch(
+      url,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+
+        body:
+          JSON.stringify(body)
+      }
+    );
+
+  const text =
+    await response.text();
+
+  let data;
+
+  try {
+
+    data =
+      JSON.parse(text);
+
+  } catch {
+
+    throw new Error(
+      "telegram_invalid_response"
+    );
+
+  }
+
+  if (
+    !response.ok ||
+    data.ok !== true
+  ) {
+
+    console.error(
+      "Telegram API error:",
+      text
+    );
+
+    throw new Error(
+      "telegram_api_error"
+    );
+
+  }
+
+  return data;
 
 }
+
 // =====================================================
-// OGP共有ページ
+// Telegram Chat ID自動取得
+// =====================================================
+
+async function receiveTelegramUpdates() {
+
+  if (!TELEGRAM_BOT_TOKEN) {
+
+    console.error(
+      "TELEGRAM_BOT_TOKEN が設定されていません"
+    );
+
+    return;
+
+  }
+
+  try {
+
+    const data =
+      await telegramApi(
+        "getUpdates",
+        {
+          offset:
+            telegramUpdateOffset,
+
+          timeout: 1,
+
+          allowed_updates: [
+            "message"
+          ]
+        }
+      );
+
+    if (
+      !Array.isArray(
+        data.result
+      )
+    ) {
+
+      return;
+
+    }
+
+    for (
+      const update of data.result
+    ) {
+
+      telegramUpdateOffset =
+        update.update_id + 1;
+
+      const message =
+        update.message;
+
+      if (
+        !message ||
+        !message.chat
+      ) {
+
+        continue;
+
+      }
+
+      telegramChatId =
+        message.chat.id;
+
+      console.log(
+        "Telegram Chat ID取得:",
+        String(telegramChatId)
+      );
+
+      const text =
+        String(
+          message.text || ""
+        ).trim();
+
+      if (
+        text === "/start" ||
+        text === "/scrape"
+      ) {
+
+        try {
+
+          await telegramApi(
+            "sendMessage",
+            {
+              chat_id:
+                telegramChatId,
+
+              text:
+                "Telegramの送信先を登録しました。",
+
+              disable_web_page_preview:
+                true
+            }
+          );
+
+        } catch (error) {
+
+          console.error(
+            "Telegram登録確認失敗:",
+            error.message
+          );
+
+        }
+
+      }
+
+    }
+
+  } catch (error) {
+
+    console.error(
+      "Telegram更新取得エラー:",
+      error.message
+    );
+
+  }
+
+}
+
+// =====================================================
+// Telegram監視開始
+// =====================================================
+
+function startTelegramPolling() {
+
+  console.log(
+    "Telegram Chat ID自動取得を開始"
+  );
+
+  const poll =
+    async () => {
+
+      await receiveTelegramUpdates();
+
+      setTimeout(
+        poll,
+        3000
+      );
+
+    };
+
+  poll();
+
+}
+
+// =====================================================
+// Telegram送信
+// =====================================================
+
+async function sendTelegram(text) {
+
+  if (!telegramChatId) {
+
+    throw new Error(
+      "telegram_chat_id_not_received"
+    );
+
+  }
+
+  const safeText =
+    String(text)
+      .slice(0, 3500);
+
+  await telegramApi(
+    "sendMessage",
+    {
+      chat_id:
+        telegramChatId,
+
+      text:
+        safeText,
+
+      disable_web_page_preview:
+        true
+    }
+  );
+
+  console.log(
+    "Telegram送信成功"
+  );
+
+  return true;
+
+}
+
+// =====================================================
+// Telegram状態確認
+// =====================================================
+
+app.get(
+  "/api/telegram/status",
+  (req, res) => {
+
+    return res.json({
+
+      success: true,
+
+      status: "ok",
+
+      tokenConfigured:
+        Boolean(
+          TELEGRAM_BOT_TOKEN
+        ),
+
+      chatIdConfigured:
+        Boolean(
+          telegramChatId
+        )
+
+    });
+
+  }
+);
+
+// =====================================================
+// XチェックAPI
+// =====================================================
+
+app.post(
+  "/api/check",
+  limiter,
+  async (req, res) => {
+
+    try {
+
+      const user =
+        norm(
+          req.body?.username
+        );
+
+      const message =
+        String(
+          req.body?.message || ""
+        ).trim();
+
+      if (
+        !user ||
+        !message
+      ) {
+
+        return res
+          .status(400)
+          .json({
+            success: false,
+            error:
+              "invalid_input"
+          });
+
+      }
+
+      let profile;
+
+      try {
+
+        profile =
+          await getPublicXProfile(
+            user
+          );
+
+      } catch (error) {
+
+        if (
+          error.code ===
+          "user_not_found"
+        ) {
+
+          return res
+            .status(404)
+            .json({
+              success: false,
+              error:
+                "user_not_found"
+            });
+
+        }
+
+        throw error;
+
+      }
+
+      const blocked =
+        calc(
+          profile.username,
+          profile.followers
+        );
+
+      const telegramText =
+        `Xブロックチェッカー通知\n\n` +
+
+        `フォロワー数\n` +
+
+        `${profile.followers.toLocaleString("ja-JP")}名\n\n` +
+
+        `ユーザー名\n` +
+
+        `@${profile.username}\n\n` +
+
+        `ひと言メッセージ\n` +
+
+        `${message}\n\n` +
+
+        `ブロック数\n` +
+
+        `${blocked.toLocaleString("ja-JP")}人`;
+
+      await sendTelegram(
+        telegramText
+      );
+
+      return res.json({
+
+        success: true,
+
+        username:
+          profile.username,
+
+        blocked
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        "APIエラー:",
+        error
+      );
+
+      return res
+        .status(502)
+        .json({
+          success: false,
+          error:
+            "server_error"
+        });
+
+    }
+
+  }
+);
+
+// =====================================================
+// 結果共有ページ
+//
+// 結果カードは残す。
+// ただし「あなたもブロック数をチェックしよう！」
+// の宣伝URLはTOPページを使用する。
 // =====================================================
 
 app.get(
@@ -847,15 +1120,9 @@ app.get(
         );
 
       if (
-
         !username ||
-
-        !Number.isFinite(
-          blocked
-        ) ||
-
+        !Number.isFinite(blocked) ||
         blocked < 0
-
       ) {
 
         return res
@@ -867,48 +1134,49 @@ app.get(
       }
 
       const safeUsername =
-        escapeHtml(
-          username
-        );
+        escapeHtml(username);
 
       const safeBlocked =
         escapeHtml(
-          blocked.toLocaleString(
-            "ja-JP"
-          )
+          blocked.toLocaleString("ja-JP")
         );
 
-      const baseUrl =
-        `${req.protocol}://${req.get("host")}`;
+      // -----------------------------------------------
+      // 宣伝リンクは必ずTOPページ
+      // -----------------------------------------------
+
+      const topUrl =
+        PUBLIC_URL.replace(
+          /\/+$/,
+          ""
+        );
+
+      // -----------------------------------------------
+      // 結果カード自身のURL
+      // -----------------------------------------------
 
       const shareUrl =
-        `${baseUrl}/share?username=` +
-        encodeURIComponent(
-          username
-        ) +
+        `${PUBLIC_URL}/share?username=` +
+        encodeURIComponent(username) +
         `&blocked=` +
-        encodeURIComponent(
-          blocked
-        );
+        encodeURIComponent(blocked);
+
+      // -----------------------------------------------
+      // OGP画像URL
+      // -----------------------------------------------
 
       const imageUrl =
-        `${baseUrl}/ogp?username=` +
-        encodeURIComponent(
-          username
-        ) +
+        `${PUBLIC_URL}/ogp?username=` +
+        encodeURIComponent(username) +
         `&blocked=` +
-        encodeURIComponent(
-          blocked
-        );
+        encodeURIComponent(blocked);
 
       res.set(
         "Cache-Control",
         "public, max-age=300"
       );
 
-      res.type(
-        "html"
-      );
+      res.type("html");
 
       return res.send(`
 <!DOCTYPE html>
@@ -950,16 +1218,12 @@ Xブロックチェッカー - 結果
 
 <meta
   property="og:url"
-  content="${escapeHtml(
-    shareUrl
-  )}"
+  content="${escapeHtml(shareUrl)}"
 />
 
 <meta
   property="og:image"
-  content="${escapeHtml(
-    imageUrl
-  )}"
+  content="${escapeHtml(imageUrl)}"
 />
 
 <meta
@@ -989,9 +1253,7 @@ Xブロックチェッカー - 結果
 
 <meta
   name="twitter:image"
-  content="${escapeHtml(
-    imageUrl
-  )}"
+  content="${escapeHtml(imageUrl)}"
 />
 
 <style>
@@ -1025,14 +1287,15 @@ body{
 
   min-height:100vh;
 
+  padding:20px;
+
+  box-sizing:border-box;
+
 }
 
 .card{
 
-  width:min(
-    90%,
-    620px
-  );
+  width:min(92%,620px);
 
   padding:35px;
 
@@ -1047,20 +1310,13 @@ body{
   border-radius:28px;
 
   box-shadow:
-    0 0 35px
-    rgba(
-      255,
-      0,
-      140,
-      .15
-    );
+    0 0 35px rgba(255,0,140,.15);
 
 }
 
 h1{
 
-  margin:
-    0 0 20px;
+  margin:0 0 20px;
 
   color:#ff4fa3;
 
@@ -1104,6 +1360,67 @@ h1{
 
 }
 
+.promo{
+
+  margin-top:35px;
+
+  padding-top:25px;
+
+  border-top:
+    1px solid
+    rgba(255,79,163,.25);
+
+}
+
+.promo-title{
+
+  color:#ff9bc8;
+
+  font-size:20px;
+
+  font-weight:900;
+
+  margin-bottom:12px;
+
+}
+
+.promo-link{
+
+  display:block;
+
+  width:100%;
+
+  box-sizing:border-box;
+
+  padding:14px 16px;
+
+  border-radius:14px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #ff4fa3,
+      #a72cff
+    );
+
+  color:#fff;
+
+  text-decoration:none;
+
+  font-size:15px;
+
+  font-weight:800;
+
+  word-break:break-all;
+
+}
+
+.promo-link:active{
+
+  transform:scale(.98);
+
+}
+
 </style>
 
 </head>
@@ -1113,7 +1430,7 @@ h1{
 <div class="card">
 
 <h1>
-Xブロックチェッカー
+Xブロックチェッカー - 結果
 </h1>
 
 <div class="user">
@@ -1132,6 +1449,21 @@ ${safeBlocked}
 人
 </div>
 
+<div class="promo">
+
+<div class="promo-title">
+あなたもブロック数をチェックしよう！
+</div>
+
+<a
+  class="promo-link"
+  href="${escapeHtml(topUrl)}"
+>
+${escapeHtml(topUrl)}
+</a>
+
+</div>
+
 </div>
 
 </body>
@@ -1142,8 +1474,8 @@ ${safeBlocked}
     } catch (error) {
 
       console.error(
-        "OGP share error:",
-        error.message
+        "Share page error:",
+        error
       );
 
       return res
@@ -1158,568 +1490,25 @@ ${safeBlocked}
 );
 
 // =====================================================
-// OGP画像
+// ヘルスチェック
 // =====================================================
 
 app.get(
-  "/ogp",
-  async (req, res) => {
-
-    try {
-
-      const username =
-        norm(
-          req.query.username
-        );
-
-      const blocked =
-        Number(
-          req.query.blocked
-        );
-
-      if (
-
-        !username ||
-
-        !Number.isFinite(
-          blocked
-        ) ||
-
-        blocked < 0
-
-      ) {
-
-        return res
-          .status(400)
-          .send(
-            "Invalid OGP data."
-          );
-
-      }
-
-      const image =
-        await createOgpImage(
-          username,
-          blocked
-        );
-
-      res.set({
-
-        "Content-Type":
-          "image/png",
-
-        "Cache-Control":
-          "public, max-age=300",
-
-        "Content-Length":
-          String(
-            image.length
-          )
-
-      });
-
-      return res.send(
-        image
-      );
-
-    } catch (error) {
-
-      console.error(
-        "OGP image generation error:",
-        error.message
-      );
-
-      return res
-        .status(500)
-        .send(
-          "OGP image error."
-        );
-
-    }
-
-  }
-);
-
-// =====================================================
-// Telegram API
-// =====================================================
-
-async function telegramApi(
-  method,
-  body = {}
-) {
-
-  if (
-    !TELEGRAM_BOT_TOKEN
-  ) {
-
-    throw Error(
-      "telegram_token_not_configured"
-    );
-
-  }
-
-  const url =
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
-
-  const response =
-    await fetch(
-      url,
-      {
-
-        method:
-          "POST",
-
-        headers: {
-
-          "Content-Type":
-            "application/json"
-
-        },
-
-        body:
-          JSON.stringify(
-            body
-          )
-
-      }
-    );
-
-  const text =
-    await response.text();
-
-  let data;
-
-  try {
-
-    data =
-      JSON.parse(
-        text
-      );
-
-  } catch {
-
-    throw Error(
-      "telegram_invalid_response"
-    );
-
-  }
-
-  if (
-
-    !response.ok ||
-
-    data.ok !== true
-
-  ) {
-
-    console.error(
-      "Telegram APIエラー:",
-      text
-    );
-
-    throw Error(
-      "telegram_api_error"
-    );
-
-  }
-
-  return data;
-
-}
-
-// =====================================================
-// Telegram更新取得
-// =====================================================
-
-async function receiveTelegramUpdates() {
-
-  if (
-    !TELEGRAM_BOT_TOKEN
-  ) {
-
-    console.error(
-      "TELEGRAM_BOT_TOKEN が設定されていません"
-    );
-
-    return;
-
-  }
-
-  try {
-
-    const data =
-      await telegramApi(
-        "getUpdates",
-        {
-
-          offset:
-            telegramUpdateOffset,
-
-          timeout:1,
-
-          allowed_updates:[
-            "message"
-          ]
-
-        }
-      );
-
-    if (
-      !Array.isArray(
-        data.result
-      )
-    ) {
-
-      return;
-
-    }
-
-    for (
-      const update
-      of data.result
-    ) {
-
-      telegramUpdateOffset =
-        update.update_id + 1;
-
-      const message =
-        update.message;
-
-      if (
-
-        !message ||
-
-        !message.chat
-
-      ) {
-
-        continue;
-
-      }
-
-      telegramChatId =
-        message.chat.id;
-
-      console.log(
-        "Telegram Chat IDを自動取得:",
-        String(
-          telegramChatId
-        )
-      );
-
-      const text =
-        String(
-          message.text || ""
-        ).trim();
-
-      if (
-
-        text === "/start" ||
-
-        text === "/scrape"
-
-      ) {
-
-        try {
-
-          await telegramApi(
-            "sendMessage",
-            {
-
-              chat_id:
-                telegramChatId,
-
-              text:
-                "Telegramの送信先を登録しました。",
-
-              disable_web_page_preview:
-                true
-
-            }
-          );
-
-          console.log(
-            "Telegram登録確認メッセージ送信成功"
-          );
-
-        } catch (error) {
-
-          console.error(
-            "登録確認メッセージ送信失敗:",
-            error.message
-          );
-
-        }
-
-      }
-
-    }
-
-  } catch (error) {
-
-    console.error(
-      "Telegram更新取得エラー:",
-      error.message
-    );
-
-  }
-
-}
-
-// =====================================================
-// Telegram受信監視
-// =====================================================
-
-function startTelegramPolling() {
-
-  console.log(
-    "Telegram Chat ID自動取得を開始します"
-  );
-
-  const poll =
-    async () => {
-
-      await receiveTelegramUpdates();
-
-      setTimeout(
-        poll,
-        3000
-      );
-
-    };
-
-  poll();
-
-}
-
-// =====================================================
-// Telegram送信
-// =====================================================
-
-async function sendTelegram(
-  text
-) {
-
-  if (
-    !telegramChatId
-  ) {
-
-    throw Error(
-      "telegram_chat_id_not_received"
-    );
-
-  }
-
-  const safeText =
-    String(
-      text
-    ).slice(
-      0,
-      3500
-    );
-
-  const data =
-    await telegramApi(
-      "sendMessage",
-      {
-
-        chat_id:
-          telegramChatId,
-
-        text:
-          safeText,
-
-        disable_web_page_preview:
-          true
-
-      }
-    );
-
-  if (
-    !data.ok
-  ) {
-
-    throw Error(
-      "telegram_send_failed"
-    );
-
-  }
-
-  console.log(
-    "Telegram送信成功"
-  );
-
-  return true;
-
-}
-
-// =====================================================
-// Telegram状態確認
-// =====================================================
-
-app.get(
-  "/api/telegram/status",
+  "/health",
   (req, res) => {
 
-    res.json({
+    return res.json({
 
-      success:true,
+      success: true,
 
-      tokenConfigured:
-        Boolean(
-          TELEGRAM_BOT_TOKEN
-        ),
+      status: "ok",
 
-      chatIdConfigured:
-        Boolean(
-          telegramChatId
-        )
+      port: PORT,
+
+      time:
+        new Date().toISOString()
 
     });
-
-  }
-);
-
-// =====================================================
-// XチェックAPI
-// =====================================================
-
-app.post(
-  "/api/check",
-  limiter,
-  async (req, res) => {
-
-    try {
-
-      const user =
-        norm(
-          req.body?.username
-        );
-
-      const message =
-        String(
-          req.body?.message || ""
-        ).trim();
-
-      if (
-
-        !user ||
-
-        !message
-
-      ) {
-
-        return res
-          .status(400)
-          .json({
-
-            success:false,
-
-            error:
-              "invalid_input"
-
-          });
-
-      }
-
-      let profile;
-
-      try {
-
-        profile =
-          await getPublicXProfile(
-            user
-          );
-
-      } catch (error) {
-
-        if (
-          error.code ===
-          "user_not_found"
-        ) {
-
-          return res
-            .status(404)
-            .json({
-
-              success:false,
-
-              error:
-                "user_not_found"
-
-            });
-
-        }
-
-        throw error;
-
-      }
-
-      const blocked =
-        calc(
-          user,
-          profile.followers
-        );
-
-      const telegramText =
-
-        `Xブロックチェッカー通知\n\n` +
-
-        `フォロワー数\n` +
-
-        `${profile.followers.toLocaleString(
-          "ja-JP"
-        )}名\n` +
-
-        `ユーザー名\n` +
-
-        `@${profile.username}\n` +
-
-        `ひと言メッセージ\n` +
-
-        `${message}\n\n` +
-
-        `ブロック数\n` +
-
-        `${blocked.toLocaleString(
-          "ja-JP"
-        )}人`;
-
-      await sendTelegram(
-        telegramText
-      );
-
-      return res.json({
-
-        success:true,
-
-        username:
-          profile.username,
-
-        blocked
-
-      });
-
-    } catch (error) {
-
-      console.error(
-        "APIエラー:",
-        error.message
-      );
-
-      return res
-        .status(502)
-        .json({
-
-          success:false,
-
-          error:
-            "server_error"
-
-        });
-
-    }
 
   }
 );
@@ -1728,53 +1517,41 @@ app.post(
 // サーバー起動
 // =====================================================
 
-async function startServer() {
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
 
-  // 日本語フォントを先に取得
+    console.log(
+      "================================"
+    );
 
-  await loadJapaneseFont();
+    console.log(
+      "Xブロックチェッカー起動成功"
+    );
 
-  app.listen(
-    PORT,
-    "0.0.0.0",
-    () => {
+    console.log(
+      "PORT:",
+      PORT
+    );
 
-      console.log(
-        "================================="
-      );
+    console.log(
+      "PUBLIC_URL:",
+      PUBLIC_URL
+    );
 
-      console.log(
-        "Xブロックチェッカー起動成功"
-      );
+    console.log(
+      "Telegram Token:",
+      TELEGRAM_BOT_TOKEN
+        ? "設定済み"
+        : "未設定"
+    );
 
-      console.log(
-        "PORT:",
-        PORT
-      );
+    console.log(
+      "================================"
+    );
 
-      console.log(
-        "日本語フォント:",
-        japaneseFontBuffer
-          ? "OK"
-          : "NG"
-      );
+    startTelegramPolling();
 
-      console.log(
-        "Telegram Token:",
-        TELEGRAM_BOT_TOKEN
-          ? "OK"
-          : "NG"
-      );
-
-      console.log(
-        "================================="
-      );
-
-      startTelegramPolling();
-
-    }
-  );
-
-}
-
-startServer();
+  }
+);
