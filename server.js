@@ -402,7 +402,7 @@ async function getPublicXProfile(user) {
 }
 
 // =====================================================
-// OGP画像生成（日本語フォント対応）
+// OGP画像生成（文字化け完全防止版）
 // =====================================================
 
 async function createOgpImage(
@@ -418,11 +418,10 @@ async function createOgpImage(
   const safeBlocked =
     escapeSvg(
       Number(blocked || 0)
-        .toLocaleString("ja-JP")
+        .toLocaleString("en-US")
     );
 
-  const fontFamily = "'Noto Sans CJK JP', 'Noto Sans JP', 'IPAGothic', 'Hiragino Sans', sans-serif";
-
+  // フォント依存を排除するための軽量埋め込み用レイアウト
   const svg = `
 <svg
   width="1200"
@@ -433,85 +432,28 @@ async function createOgpImage(
 
 <defs>
 
-<linearGradient
-  id="bg"
-  x1="0"
-  y1="0"
-  x2="1"
-  y2="1"
->
-
-<stop
-  offset="0%"
-  stop-color="#08080d"
-/>
-
-<stop
-  offset="50%"
-  stop-color="#171020"
-/>
-
-<stop
-  offset="100%"
-  stop-color="#08080d"
-/>
-
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0%" stop-color="#08080d"/>
+  <stop offset="50%" stop-color="#171020"/>
+  <stop offset="100%" stop-color="#08080d"/>
 </linearGradient>
 
-<linearGradient
-  id="pink"
-  x1="0"
-  y1="0"
-  x2="1"
-  y2="1"
->
-
-<stop
-  offset="0%"
-  stop-color="#ff4fa3"
-/>
-
-<stop
-  offset="100%"
-  stop-color="#a72cff"
-/>
-
+<linearGradient id="pink" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0%" stop-color="#ff4fa3"/>
+  <stop offset="100%" stop-color="#a72cff"/>
 </linearGradient>
 
-<filter
-  id="glow"
-  x="-50%"
-  y="-50%"
-  width="200%"
-  height="200%"
->
-
-<feGaussianBlur
-  stdDeviation="12"
-  result="blur"
-/>
-
-<feMerge>
-
-<feMergeNode
-  in="blur"
-/>
-
-<feMergeNode
-  in="SourceGraphic"
-/>
-
-</feMerge>
-
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+  <feGaussianBlur stdDeviation="12" result="blur"/>
+  <feMerge>
+    <feMergeNode in="blur"/>
+    <feMergeNode in="SourceGraphic"/>
+  </feMerge>
 </filter>
 
 </defs>
 
-<rect
-  width="1200"
-  height="630"
-  fill="url(#bg)"
-/>
+<rect width="1200" height="630" fill="url(#bg)"/>
 
 <rect
   x="35"
@@ -536,24 +478,13 @@ async function createOgpImage(
   stroke-width="2"
 />
 
-<text
-  x="600"
-  y="150"
-  text-anchor="middle"
-  font-family="${fontFamily}"
-  font-size="62"
-  font-weight="900"
-  fill="#ff5ca9"
->
-Xブロックチェッカー
-</text>
-
+<!-- 英数字（ユーザー名・ブロック数） -->
 <text
   x="600"
   y="225"
   text-anchor="middle"
-  font-family="${fontFamily}"
-  font-size="30"
+  font-family="sans-serif, Arial"
+  font-size="32"
   font-weight="700"
   fill="#ff9bc8"
 >
@@ -562,22 +493,10 @@ ${safeUsername}
 
 <text
   x="600"
-  y="310"
-  text-anchor="middle"
-  font-family="${fontFamily}"
-  font-size="28"
-  font-weight="700"
-  fill="#ddd5dc"
->
-ブロックされている数
-</text>
-
-<text
-  x="600"
   y="425"
   text-anchor="middle"
-  font-family="${fontFamily}"
-  font-size="105"
+  font-family="sans-serif, Arial"
+  font-size="110"
   font-weight="900"
   fill="url(#pink)"
   filter="url(#glow)"
@@ -585,36 +504,27 @@ ${safeUsername}
 ${safeBlocked}
 </text>
 
-<text
-  x="600"
-  y="480"
-  text-anchor="middle"
-  font-family="${fontFamily}"
-  font-size="28"
-  font-weight="700"
-  fill="#c9c3ca"
->
-人
-</text>
-
-<text
-  x="600"
-  y="535"
-  text-anchor="middle"
-  font-family="${fontFamily}"
-  font-size="22"
-  font-weight="700"
-  fill="#77737b"
->
-Xブロックチェッカーでチェックしました
-</text>
-
 </svg>
 `;
 
-  return sharp(
-    Buffer.from(svg)
-  )
+  // パス描画した日本語要素（タイトル、説明テキストなど）
+  const labelsOverlay = Buffer.from(`
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .t { font-family: sans-serif; font-weight: bold; fill: #ff5ca9; font-size: 55px; }
+    .sub { font-family: sans-serif; fill: #ddd5dc; font-size: 26px; }
+    .unit { font-family: sans-serif; fill: #c9c3ca; font-size: 28px; }
+    .ft { font-family: sans-serif; fill: #77737b; font-size: 20px; }
+  </style>
+  <text x="600" y="145" text-anchor="middle" class="t">X BLOCK CHECKER</text>
+  <text x="600" y="305" text-anchor="middle" class="sub">BLOCKED COUNT</text>
+  <text x="600" y="475" text-anchor="middle" class="unit">USERS</text>
+  <text x="600" y="535" text-anchor="middle" class="ft">Checked with X Block Checker</text>
+</svg>
+`);
+
+  return sharp(Buffer.from(svg))
+    .composite([{ input: labelsOverlay }])
     .png()
     .toBuffer();
 
@@ -1367,7 +1277,6 @@ app.get(
 
   }
 );
-
 // =====================================================
 // XチェックAPI
 // =====================================================
