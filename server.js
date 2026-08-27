@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const path = require("path");
 const rateLimit = require("express-rate-limit");
 const sharp = require("sharp");
+const { Resvg } = require("@resvg/resvg-js");
 
 const app = express();
 
@@ -23,18 +24,82 @@ let telegramChatId = null;
 let telegramUpdateOffset = 0;
 
 // =====================================================
+// OGP用 日本語フォント
+// =====================================================
+
+// Google FontsのNoto Sans JP
+// サーバー起動時に取得してメモリへ保存します。
+
+const JAPANESE_FONT_URL =
+  "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf";
+
+let japaneseFontBuffer = null;
+
+async function loadJapaneseFont() {
+
+  try {
+
+    console.log(
+      "日本語フォント取得開始..."
+    );
+
+    const response =
+      await fetch(
+        JAPANESE_FONT_URL
+      );
+
+    if (!response.ok) {
+
+      throw new Error(
+        "font_http_" +
+        response.status
+      );
+    }
+
+    const arrayBuffer =
+      await response.arrayBuffer();
+
+    japaneseFontBuffer =
+      Buffer.from(arrayBuffer);
+
+    console.log(
+      "日本語フォント取得成功:",
+      japaneseFontBuffer.length,
+      "bytes"
+    );
+
+  } catch (error) {
+
+    japaneseFontBuffer = null;
+
+    console.error(
+      "日本語フォント取得失敗:",
+      error.message
+    );
+  }
+}
+
+// =====================================================
 // Rate Limit
 // =====================================================
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+
+  windowMs:
+    15 * 60 * 1000,
+
   max: 30,
+
   standardHeaders: true,
+
   legacyHeaders: false,
+
   message: {
     success: false,
-    error: "rate_limit_exceeded"
+    error:
+      "rate_limit_exceeded"
   }
+
 });
 
 // =====================================================
@@ -49,7 +114,10 @@ app.use(
 
 app.use(
   express.static(
-    path.join(__dirname, "public")
+    path.join(
+      __dirname,
+      "public"
+    )
   )
 );
 
@@ -57,29 +125,30 @@ app.use(
 // トップページ
 // =====================================================
 
-app.get("/", (req, res) => {
+app.get(
+  "/",
+  (req, res) => {
 
-  res.sendFile(
-    path.join(
-      __dirname,
-      "x_block_checker_preview.html"
-    )
-  );
+    res.sendFile(
+      path.join(
+        __dirname,
+        "x_block_checker_preview.html"
+      )
+    );
 
-});
+  }
+);
 
 // =====================================================
 // ユーザー名正規化
 // =====================================================
 
-function norm(value) {
+const norm = (v) =>
 
-  return String(value || "")
+  String(v || "")
     .trim()
     .replace(/^@+/, "")
     .replace(/\s/g, "");
-
-}
 
 // =====================================================
 // HTMLエスケープ
@@ -88,11 +157,26 @@ function norm(value) {
 function escapeHtml(value) {
 
   return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
 
 }
 
@@ -103,11 +187,26 @@ function escapeHtml(value) {
 function escapeSvg(value) {
 
   return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&apos;"
+    );
 
 }
 
@@ -115,18 +214,22 @@ function escapeSvg(value) {
 // 同じユーザー名なら同じブロック数
 // =====================================================
 
-function calc(user, followers) {
+function calc(
+  user,
+  followers
+) {
 
-  const hash = crypto
-    .createHash("sha256")
-    .update(
-      norm(user).toLowerCase(),
-      "utf8"
-    )
-    .digest();
+  const h =
+    crypto
+      .createHash("sha256")
+      .update(
+        norm(user).toLowerCase(),
+        "utf8"
+      )
+      .digest();
 
   const seed =
-    hash.readUInt32BE(0) /
+    h.readUInt32BE(0) /
     0xffffffff;
 
   const max =
@@ -144,18 +247,25 @@ function calc(user, followers) {
 // X公開ページ取得
 // =====================================================
 
-async function getPublicXProfile(user) {
+async function getPublicXProfile(
+  user
+) {
 
-  const username = norm(user);
+  const username =
+    norm(user);
 
   if (!username) {
+
     throw Error(
       "empty_username"
     );
+
   }
 
   const xUrl =
-    `https://x.com/${encodeURIComponent(username)}`;
+    `https://x.com/${encodeURIComponent(
+      username
+    )}`;
 
   console.log(
     "Xプロフィール取得開始:",
@@ -167,12 +277,13 @@ async function getPublicXProfile(user) {
       xUrl,
       {
         method: "GET",
+
         redirect: "follow",
 
         headers: {
 
           "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
 
           "Accept":
             "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -196,7 +307,9 @@ async function getPublicXProfile(user) {
     response.status
   );
 
-  if (response.status === 404) {
+  if (
+    response.status === 404
+  ) {
 
     const error =
       new Error(
@@ -229,11 +342,27 @@ async function getPublicXProfile(user) {
   );
 
   if (
-    /this account doesn't exist/i.test(html) ||
-    /this account doesn.t exist/i.test(html) ||
-    /page doesn.t exist/i.test(html) ||
-    /account suspended/i.test(html) ||
-    /account is suspended/i.test(html)
+
+    /this account doesn't exist/i.test(
+      html
+    ) ||
+
+    /this account doesn.t exist/i.test(
+      html
+    ) ||
+
+    /page doesn.t exist/i.test(
+      html
+    ) ||
+
+    /account suspended/i.test(
+      html
+    ) ||
+
+    /account is suspended/i.test(
+      html
+    )
+
   ) {
 
     const error =
@@ -250,9 +379,7 @@ async function getPublicXProfile(user) {
 
   let followers = null;
 
-  // ---------------------------------------------------
-  // パターン1
-  // ---------------------------------------------------
+  // pattern 1
 
   const match1 =
     html.match(
@@ -262,7 +389,9 @@ async function getPublicXProfile(user) {
   if (match1) {
 
     followers =
-      Number(match1[1]);
+      Number(
+        match1[1]
+      );
 
     console.log(
       "フォロワー数取得成功 pattern1:",
@@ -271,11 +400,11 @@ async function getPublicXProfile(user) {
 
   }
 
-  // ---------------------------------------------------
-  // パターン2
-  // ---------------------------------------------------
+  // pattern 2
 
-  if (followers === null) {
+  if (
+    followers === null
+  ) {
 
     const match2 =
       html.match(
@@ -285,7 +414,9 @@ async function getPublicXProfile(user) {
     if (match2) {
 
       followers =
-        Number(match2[1]);
+        Number(
+          match2[1]
+        );
 
       console.log(
         "フォロワー数取得成功 pattern2:",
@@ -296,11 +427,11 @@ async function getPublicXProfile(user) {
 
   }
 
-  // ---------------------------------------------------
-  // パターン3
-  // ---------------------------------------------------
+  // pattern 3
 
-  if (followers === null) {
+  if (
+    followers === null
+  ) {
 
     const match3 =
       html.match(
@@ -310,7 +441,9 @@ async function getPublicXProfile(user) {
     if (match3) {
 
       followers =
-        Number(match3[1]);
+        Number(
+          match3[1]
+        );
 
       console.log(
         "フォロワー数取得成功 pattern3:",
@@ -321,11 +454,11 @@ async function getPublicXProfile(user) {
 
   }
 
-  // ---------------------------------------------------
-  // パターン4
-  // ---------------------------------------------------
+  // pattern 4
 
-  if (followers === null) {
+  if (
+    followers === null
+  ) {
 
     const followerPatterns = [
 
@@ -340,26 +473,41 @@ async function getPublicXProfile(user) {
     ];
 
     for (
-      const pattern of followerPatterns
+      const pattern
+      of followerPatterns
     ) {
 
       const match =
-        html.match(pattern);
+        html.match(
+          pattern
+        );
 
       if (!match) {
+
         continue;
+
       }
 
       const cleaned =
         match[1]
-          .replace(/[,\s.]/g, "");
+          .replace(
+            /[,\s.]/g,
+            ""
+          );
 
       const number =
-        Number(cleaned);
+        Number(
+          cleaned
+        );
 
       if (
-        Number.isSafeInteger(number) &&
+
+        Number.isSafeInteger(
+          number
+        ) &&
+
         number >= 0
+
       ) {
 
         followers =
@@ -379,9 +527,15 @@ async function getPublicXProfile(user) {
   }
 
   if (
+
     followers === null ||
-    !Number.isSafeInteger(followers) ||
+
+    !Number.isSafeInteger(
+      followers
+    ) ||
+
     followers < 0
+
   ) {
 
     console.error(
@@ -395,14 +549,18 @@ async function getPublicXProfile(user) {
   }
 
   return {
+
     username,
+
     followers
+
   };
 
 }
 
 // =====================================================
 // OGP画像生成
+// 日本語フォント対応版
 // =====================================================
 
 async function createOgpImage(
@@ -412,13 +570,17 @@ async function createOgpImage(
 
   const safeUsername =
     escapeSvg(
-      "@" + norm(username)
+      "@" +
+      norm(username)
     );
 
   const safeBlocked =
     escapeSvg(
-      Number(blocked || 0)
-        .toLocaleString("ja-JP")
+      Number(
+        blocked || 0
+      ).toLocaleString(
+        "ja-JP"
+      )
     );
 
   const svg = `
@@ -429,186 +591,233 @@ async function createOgpImage(
   xmlns="http://www.w3.org/2000/svg"
 >
 
-<defs>
+  <defs>
 
-<linearGradient
-  id="bg"
-  x1="0"
-  y1="0"
-  x2="1"
-  y2="1"
->
+    <linearGradient
+      id="bg"
+      x1="0"
+      y1="0"
+      x2="1"
+      y2="1"
+    >
 
-<stop
-  offset="0%"
-  stop-color="#08080d"
-/>
+      <stop
+        offset="0%"
+        stop-color="#08080d"
+      />
 
-<stop
-  offset="50%"
-  stop-color="#171020"
-/>
+      <stop
+        offset="50%"
+        stop-color="#171020"
+      />
 
-<stop
-  offset="100%"
-  stop-color="#08080d"
-/>
+      <stop
+        offset="100%"
+        stop-color="#08080d"
+      />
 
-</linearGradient>
+    </linearGradient>
 
-<linearGradient
-  id="pink"
-  x1="0"
-  y1="0"
-  x2="1"
-  y2="1"
->
+    <linearGradient
+      id="pink"
+      x1="0"
+      y1="0"
+      x2="1"
+      y2="1"
+    >
 
-<stop
-  offset="0%"
-  stop-color="#ff4fa3"
-/>
+      <stop
+        offset="0%"
+        stop-color="#ff4fa3"
+      />
 
-<stop
-  offset="100%"
-  stop-color="#a72cff"
-/>
+      <stop
+        offset="100%"
+        stop-color="#a72cff"
+      />
 
-</linearGradient>
+    </linearGradient>
 
-<filter
-  id="glow"
-  x="-50%"
-  y="-50%"
-  width="200%"
-  height="200%"
->
+    <filter
+      id="glow"
+      x="-50%"
+      y="-50%"
+      width="200%"
+      height="200%"
+    >
 
-<feGaussianBlur
-  stdDeviation="12"
-  result="blur"
-/>
+      <feGaussianBlur
+        stdDeviation="12"
+        result="blur"
+      />
 
-<feMerge>
+      <feMerge>
 
-<feMergeNode
-  in="blur"
-/>
+        <feMergeNode
+          in="blur"
+        />
 
-<feMergeNode
-  in="SourceGraphic"
-/>
+        <feMergeNode
+          in="SourceGraphic"
+        />
 
-</feMerge>
+      </feMerge>
 
-</filter>
+    </filter>
 
-</defs>
+  </defs>
 
-<rect
-  width="1200"
-  height="630"
-  fill="url(#bg)"
-/>
+  <rect
+    width="1200"
+    height="630"
+    fill="url(#bg)"
+  />
 
-<rect
-  x="35"
-  y="35"
-  width="1130"
-  height="560"
-  rx="35"
-  fill="#11111a"
-  stroke="#ff4fa3"
-  stroke-width="3"
-/>
+  <rect
+    x="35"
+    y="35"
+    width="1130"
+    height="560"
+    rx="35"
+    fill="#11111a"
+    stroke="#ff4fa3"
+    stroke-width="3"
+  />
 
-<rect
-  x="55"
-  y="55"
-  width="1090"
-  height="520"
-  rx="27"
-  fill="none"
-  stroke="#ff4fa3"
-  stroke-opacity="0.22"
-  stroke-width="2"
-/>
+  <rect
+    x="55"
+    y="55"
+    width="1090"
+    height="520"
+    rx="27"
+    fill="none"
+    stroke="#ff4fa3"
+    stroke-opacity="0.22"
+    stroke-width="2"
+  />
 
-<text
-  x="600"
-  y="150"
-  text-anchor="middle"
-  font-family="sans-serif"
-  font-size="62"
-  font-weight="900"
-  fill="#ff5ca9"
->
-Xブロックチェッカー
-</text>
+  <text
+    x="600"
+    y="150"
+    text-anchor="middle"
+    font-family="Noto Sans JP"
+    font-size="62"
+    font-weight="900"
+    fill="#ff5ca9"
+  >
+    Xブロックチェッカー
+  </text>
 
-<text
-  x="600"
-  y="225"
-  text-anchor="middle"
-  font-family="sans-serif"
-  font-size="30"
-  font-weight="700"
-  fill="#ff9bc8"
->
-${safeUsername}
-</text>
+  <text
+    x="600"
+    y="225"
+    text-anchor="middle"
+    font-family="Noto Sans JP"
+    font-size="30"
+    font-weight="700"
+    fill="#ff9bc8"
+  >
+    ${safeUsername}
+  </text>
 
-<text
-  x="600"
-  y="310"
-  text-anchor="middle"
-  font-family="sans-serif"
-  font-size="28"
-  font-weight="700"
-  fill="#ddd5dc"
->
-ブロックされている数
-</text>
+  <text
+    x="600"
+    y="310"
+    text-anchor="middle"
+    font-family="Noto Sans JP"
+    font-size="28"
+    font-weight="700"
+    fill="#ddd5dc"
+  >
+    ブロックされている数
+  </text>
 
-<text
-  x="600"
-  y="425"
-  text-anchor="middle"
-  font-family="sans-serif"
-  font-size="105"
-  font-weight="900"
-  fill="url(#pink)"
-  filter="url(#glow)"
->
-${safeBlocked}
-</text>
+  <text
+    x="600"
+    y="425"
+    text-anchor="middle"
+    font-family="Noto Sans JP"
+    font-size="105"
+    font-weight="900"
+    fill="url(#pink)"
+    filter="url(#glow)"
+  >
+    ${safeBlocked}
+  </text>
 
-<text
-  x="600"
-  y="480"
-  text-anchor="middle"
-  font-family="sans-serif"
-  font-size="28"
-  font-weight="700"
-  fill="#c9c3ca"
->
-人
-</text>
+  <text
+    x="600"
+    y="480"
+    text-anchor="middle"
+    font-family="Noto Sans JP"
+    font-size="28"
+    font-weight="700"
+    fill="#c9c3ca"
+  >
+    人
+  </text>
 
-<text
-  x="600"
-  y="535"
-  text-anchor="middle"
-  font-family="sans-serif"
-  font-size="22"
-  font-weight="700"
-  fill="#77737b"
->
-Xブロックチェッカーでチェックしました
-</text>
+  <text
+    x="600"
+    y="535"
+    text-anchor="middle"
+    font-family="Noto Sans JP"
+    font-size="22"
+    font-weight="700"
+    fill="#77737b"
+  >
+    Xブロックチェッカーでチェックしました
+  </text>
 
 </svg>
 `;
+
+  // 日本語フォントが取得できている場合
+  // resvgでカスタムフォントとして使用
+
+  if (
+    japaneseFontBuffer
+  ) {
+
+    const resvg =
+      new Resvg(
+        svg,
+        {
+
+          font: {
+
+            fontBuffers: [
+              japaneseFontBuffer
+            ],
+
+            loadSystemFonts:
+              false,
+
+            defaultFontFamily:
+              "Noto Sans JP",
+
+            sansSerifFamily:
+              "Noto Sans JP"
+
+          }
+
+        }
+      );
+
+    const png =
+      resvg
+        .render()
+        .asPng();
+
+    return png;
+
+  }
+
+  // フォント取得失敗時の予備処理
+
+  console.error(
+    "日本語フォントがないためSharpで生成します"
+  );
 
   return sharp(
     Buffer.from(svg)
@@ -617,156 +826,6 @@ Xブロックチェッカーでチェックしました
     .toBuffer();
 
 }
-
-// =====================================================
-// OGP画像
-//
-// ★重要
-// /ogp/ユーザー名/ブロック数.png
-// という固定形式に変更
-// =====================================================
-
-app.get(
-  "/ogp/:username/:blocked.png",
-  async (req, res) => {
-
-    try {
-
-      const username =
-        norm(
-          req.params.username
-        );
-
-      const blocked =
-        Number(
-          req.params.blocked
-        );
-
-      if (
-        !username ||
-        !Number.isFinite(blocked) ||
-        blocked < 0
-      ) {
-
-        return res
-          .status(400)
-          .send(
-            "Invalid OGP data."
-          );
-
-      }
-
-      const image =
-        await createOgpImage(
-          username,
-          blocked
-        );
-
-      res.set({
-
-        "Content-Type":
-          "image/png",
-
-        "Cache-Control":
-          "public, max-age=300",
-
-        "Content-Length":
-          String(image.length)
-
-      });
-
-      return res.send(image);
-
-    } catch (error) {
-
-      console.error(
-        "OGP image generation error:",
-        error.message
-      );
-
-      return res
-        .status(500)
-        .send(
-          "OGP image error."
-        );
-
-    }
-
-  }
-);
-
-// =====================================================
-// 旧OGP URLも対応
-// =====================================================
-
-app.get(
-  "/ogp",
-  async (req, res) => {
-
-    try {
-
-      const username =
-        norm(
-          req.query.username
-        );
-
-      const blocked =
-        Number(
-          req.query.blocked
-        );
-
-      if (
-        !username ||
-        !Number.isFinite(blocked) ||
-        blocked < 0
-      ) {
-
-        return res
-          .status(400)
-          .send(
-            "Invalid OGP data."
-          );
-
-      }
-
-      const image =
-        await createOgpImage(
-          username,
-          blocked
-        );
-
-      res.set({
-
-        "Content-Type":
-          "image/png",
-
-        "Cache-Control":
-          "public, max-age=300",
-
-        "Content-Length":
-          String(image.length)
-
-      });
-
-      return res.send(image);
-
-    } catch (error) {
-
-      console.error(
-        "OGP image error:",
-        error.message
-      );
-
-      return res
-        .status(500)
-        .send(
-          "OGP image error."
-        );
-
-    }
-
-  }
-);
 // =====================================================
 // OGP共有ページ
 // =====================================================
@@ -788,9 +847,15 @@ app.get(
         );
 
       if (
+
         !username ||
-        !Number.isFinite(blocked) ||
+
+        !Number.isFinite(
+          blocked
+        ) ||
+
         blocked < 0
+
       ) {
 
         return res
@@ -802,11 +867,15 @@ app.get(
       }
 
       const safeUsername =
-        escapeHtml(username);
+        escapeHtml(
+          username
+        );
 
       const safeBlocked =
         escapeHtml(
-          blocked.toLocaleString("ja-JP")
+          blocked.toLocaleString(
+            "ja-JP"
+          )
         );
 
       const baseUrl =
@@ -814,27 +883,36 @@ app.get(
 
       const shareUrl =
         `${baseUrl}/share?username=` +
-        encodeURIComponent(username) +
+        encodeURIComponent(
+          username
+        ) +
         `&blocked=` +
-        encodeURIComponent(blocked);
+        encodeURIComponent(
+          blocked
+        );
 
-      // ★今回変更した重要部分
       const imageUrl =
-        `${baseUrl}/ogp/` +
-        encodeURIComponent(username) +
-        `/` +
-        encodeURIComponent(blocked) +
-        `.png`;
+        `${baseUrl}/ogp?username=` +
+        encodeURIComponent(
+          username
+        ) +
+        `&blocked=` +
+        encodeURIComponent(
+          blocked
+        );
 
       res.set(
         "Cache-Control",
         "public, max-age=300"
       );
 
-      res.type("html");
+      res.type(
+        "html"
+      );
 
       return res.send(`
 <!DOCTYPE html>
+
 <html lang="ja">
 
 <head>
@@ -872,22 +950,16 @@ Xブロックチェッカー - 結果
 
 <meta
   property="og:url"
-  content="${escapeHtml(shareUrl)}"
+  content="${escapeHtml(
+    shareUrl
+  )}"
 />
 
 <meta
   property="og:image"
-  content="${escapeHtml(imageUrl)}"
-/>
-
-<meta
-  property="og:image:secure_url"
-  content="${escapeHtml(imageUrl)}"
-/>
-
-<meta
-  property="og:image:type"
-  content="image/png"
+  content="${escapeHtml(
+    imageUrl
+  )}"
 />
 
 <meta
@@ -917,7 +989,9 @@ Xブロックチェッカー - 結果
 
 <meta
   name="twitter:image"
-  content="${escapeHtml(imageUrl)}"
+  content="${escapeHtml(
+    imageUrl
+  )}"
 />
 
 <style>
@@ -955,7 +1029,10 @@ body{
 
 .card{
 
-  width:min(90%,620px);
+  width:min(
+    90%,
+    620px
+  );
 
   padding:35px;
 
@@ -970,13 +1047,20 @@ body{
   border-radius:28px;
 
   box-shadow:
-    0 0 35px rgba(255,0,140,.15);
+    0 0 35px
+    rgba(
+      255,
+      0,
+      140,
+      .15
+    );
 
 }
 
 h1{
 
-  margin:0 0 20px;
+  margin:
+    0 0 20px;
 
   color:#ff4fa3;
 
@@ -1074,6 +1158,89 @@ ${safeBlocked}
 );
 
 // =====================================================
+// OGP画像
+// =====================================================
+
+app.get(
+  "/ogp",
+  async (req, res) => {
+
+    try {
+
+      const username =
+        norm(
+          req.query.username
+        );
+
+      const blocked =
+        Number(
+          req.query.blocked
+        );
+
+      if (
+
+        !username ||
+
+        !Number.isFinite(
+          blocked
+        ) ||
+
+        blocked < 0
+
+      ) {
+
+        return res
+          .status(400)
+          .send(
+            "Invalid OGP data."
+          );
+
+      }
+
+      const image =
+        await createOgpImage(
+          username,
+          blocked
+        );
+
+      res.set({
+
+        "Content-Type":
+          "image/png",
+
+        "Cache-Control":
+          "public, max-age=300",
+
+        "Content-Length":
+          String(
+            image.length
+          )
+
+      });
+
+      return res.send(
+        image
+      );
+
+    } catch (error) {
+
+      console.error(
+        "OGP image generation error:",
+        error.message
+      );
+
+      return res
+        .status(500)
+        .send(
+          "OGP image error."
+        );
+
+    }
+
+  }
+);
+
+// =====================================================
 // Telegram API
 // =====================================================
 
@@ -1082,7 +1249,9 @@ async function telegramApi(
   body = {}
 ) {
 
-  if (!TELEGRAM_BOT_TOKEN) {
+  if (
+    !TELEGRAM_BOT_TOKEN
+  ) {
 
     throw Error(
       "telegram_token_not_configured"
@@ -1098,15 +1267,20 @@ async function telegramApi(
       url,
       {
 
-        method:"POST",
+        method:
+          "POST",
 
-        headers:{
+        headers: {
+
           "Content-Type":
             "application/json"
+
         },
 
         body:
-          JSON.stringify(body)
+          JSON.stringify(
+            body
+          )
 
       }
     );
@@ -1119,7 +1293,9 @@ async function telegramApi(
   try {
 
     data =
-      JSON.parse(text);
+      JSON.parse(
+        text
+      );
 
   } catch {
 
@@ -1130,8 +1306,11 @@ async function telegramApi(
   }
 
   if (
+
     !response.ok ||
+
     data.ok !== true
+
   ) {
 
     console.error(
@@ -1155,7 +1334,9 @@ async function telegramApi(
 
 async function receiveTelegramUpdates() {
 
-  if (!TELEGRAM_BOT_TOKEN) {
+  if (
+    !TELEGRAM_BOT_TOKEN
+  ) {
 
     console.error(
       "TELEGRAM_BOT_TOKEN が設定されていません"
@@ -1195,7 +1376,8 @@ async function receiveTelegramUpdates() {
     }
 
     for (
-      const update of data.result
+      const update
+      of data.result
     ) {
 
       telegramUpdateOffset =
@@ -1205,8 +1387,11 @@ async function receiveTelegramUpdates() {
         update.message;
 
       if (
+
         !message ||
+
         !message.chat
+
       ) {
 
         continue;
@@ -1218,7 +1403,9 @@ async function receiveTelegramUpdates() {
 
       console.log(
         "Telegram Chat IDを自動取得:",
-        String(telegramChatId)
+        String(
+          telegramChatId
+        )
       );
 
       const text =
@@ -1227,8 +1414,11 @@ async function receiveTelegramUpdates() {
         ).trim();
 
       if (
+
         text === "/start" ||
+
         text === "/scrape"
+
       ) {
 
         try {
@@ -1247,6 +1437,10 @@ async function receiveTelegramUpdates() {
                 true
 
             }
+          );
+
+          console.log(
+            "Telegram登録確認メッセージ送信成功"
           );
 
         } catch (error) {
@@ -1274,7 +1468,7 @@ async function receiveTelegramUpdates() {
 }
 
 // =====================================================
-// Telegram監視
+// Telegram受信監視
 // =====================================================
 
 function startTelegramPolling() {
@@ -1303,9 +1497,13 @@ function startTelegramPolling() {
 // Telegram送信
 // =====================================================
 
-async function sendTelegram(text) {
+async function sendTelegram(
+  text
+) {
 
-  if (!telegramChatId) {
+  if (
+    !telegramChatId
+  ) {
 
     throw Error(
       "telegram_chat_id_not_received"
@@ -1314,26 +1512,39 @@ async function sendTelegram(text) {
   }
 
   const safeText =
-    String(text).slice(
+    String(
+      text
+    ).slice(
       0,
       3500
     );
 
-  await telegramApi(
-    "sendMessage",
-    {
+  const data =
+    await telegramApi(
+      "sendMessage",
+      {
 
-      chat_id:
-        telegramChatId,
+        chat_id:
+          telegramChatId,
 
-      text:
-        safeText,
+        text:
+          safeText,
 
-      disable_web_page_preview:
-        true
+        disable_web_page_preview:
+          true
 
-    }
-  );
+      }
+    );
+
+  if (
+    !data.ok
+  ) {
+
+    throw Error(
+      "telegram_send_failed"
+    );
+
+  }
 
   console.log(
     "Telegram送信成功"
@@ -1392,8 +1603,11 @@ app.post(
         ).trim();
 
       if (
+
         !user ||
+
         !message
+
       ) {
 
         return res
@@ -1449,15 +1663,28 @@ app.post(
         );
 
       const telegramText =
+
         `Xブロックチェッカー通知\n\n` +
+
         `フォロワー数\n` +
-        `${profile.followers.toLocaleString("ja-JP")}名\n` +
+
+        `${profile.followers.toLocaleString(
+          "ja-JP"
+        )}名\n` +
+
         `ユーザー名\n` +
+
         `@${profile.username}\n` +
+
         `ひと言メッセージ\n` +
+
         `${message}\n\n` +
+
         `ブロック数\n` +
-        `${blocked.toLocaleString("ja-JP")}人`;
+
+        `${blocked.toLocaleString(
+          "ja-JP"
+        )}人`;
 
       await sendTelegram(
         telegramText
@@ -1498,43 +1725,56 @@ app.post(
 );
 
 // =====================================================
-// ヘルスチェック
-// =====================================================
-
-app.get(
-  "/health",
-  (req, res) => {
-
-    res.json({
-
-      success:true,
-
-      status:"ok",
-
-      port:PORT,
-
-      time:
-        new Date().toISOString()
-
-    });
-
-  }
-);
-
-// =====================================================
 // サーバー起動
 // =====================================================
 
-app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
+async function startServer() {
 
-    console.log(
-      `サーバー起動成功: ${PORT}`
-    );
+  // 日本語フォントを先に取得
 
-    startTelegramPolling();
+  await loadJapaneseFont();
 
-  }
-);
+  app.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
+
+      console.log(
+        "================================="
+      );
+
+      console.log(
+        "Xブロックチェッカー起動成功"
+      );
+
+      console.log(
+        "PORT:",
+        PORT
+      );
+
+      console.log(
+        "日本語フォント:",
+        japaneseFontBuffer
+          ? "OK"
+          : "NG"
+      );
+
+      console.log(
+        "Telegram Token:",
+        TELEGRAM_BOT_TOKEN
+          ? "OK"
+          : "NG"
+      );
+
+      console.log(
+        "================================="
+      );
+
+      startTelegramPolling();
+
+    }
+  );
+
+}
+
+startServer();
