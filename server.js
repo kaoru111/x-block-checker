@@ -51,7 +51,6 @@ async function loadJapaneseFont() {
 
 }
 
-// サーバー起動時にフォント取得を開始
 loadJapaneseFont();
 
 // =====================================================
@@ -249,12 +248,6 @@ async function getPublicXProfile(user) {
   const html =
     await response.text();
 
-  console.log(
-    "Xページ取得完了:",
-    html.length,
-    "bytes"
-  );
-
   if (
     /this account doesn't exist/i.test(html) ||
     /this account doesn.t exist/i.test(html) ||
@@ -389,7 +382,7 @@ async function getPublicXProfile(user) {
 }
 
 // =====================================================
-// OGP画像生成（日本語フォント完全固定）
+// OGP画像生成
 // =====================================================
 
 async function createOgpImage(
@@ -404,7 +397,6 @@ async function createOgpImage(
 
   const fontFamily = fontLoaded ? '"NotoSansJP", sans-serif' : 'sans-serif';
 
-  // 背景グラデーション
   const bgGrad = ctx.createLinearGradient(0, 0, 1200, 630);
   bgGrad.addColorStop(0, "#08080d");
   bgGrad.addColorStop(0.5, "#171020");
@@ -412,7 +404,6 @@ async function createOgpImage(
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, 1200, 630);
 
-  // 外枠カード
   ctx.fillStyle = "#11111a";
   ctx.strokeStyle = "#ff4fa3";
   ctx.lineWidth = 3;
@@ -421,7 +412,6 @@ async function createOgpImage(
   ctx.fill();
   ctx.stroke();
 
-  // 内枠線
   ctx.strokeStyle = "rgba(255, 79, 163, 0.22)";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -430,21 +420,18 @@ async function createOgpImage(
 
   ctx.textAlign = "center";
 
-  // タイトル
   ctx.fillStyle = "#ff5ca9";
   ctx.font = `bold 60px ${fontFamily}`;
   ctx.fillText("Xブロックチェッカー", 600, 150);
-  // ユーザー名
+
   ctx.fillStyle = "#ff9bc8";
   ctx.font = `bold 32px ${fontFamily}`;
   ctx.fillText("@" + norm(username), 600, 225);
 
-  // ブロックされている数ラベル
   ctx.fillStyle = "#ddd5dc";
   ctx.font = `bold 28px ${fontFamily}`;
   ctx.fillText("ブロックされている数", 600, 310);
 
-  // 数字 (ピンクグラデーション)
   const pinkGrad = ctx.createLinearGradient(0, 320, 0, 450);
   pinkGrad.addColorStop(0, "#ff4fa3");
   pinkGrad.addColorStop(1, "#a72cff");
@@ -452,12 +439,10 @@ async function createOgpImage(
   ctx.font = `900 110px ${fontFamily}`;
   ctx.fillText(Number(blocked || 0).toLocaleString("ja-JP"), 600, 425);
 
-  // 単位
   ctx.fillStyle = "#c9c3ca";
   ctx.font = `bold 28px ${fontFamily}`;
   ctx.fillText("人", 600, 480);
 
-  // フッターテキスト
   ctx.fillStyle = "#77737b";
   ctx.font = `bold 22px ${fontFamily}`;
   ctx.fillText("Xブロックチェッカーでチェックしました", 600, 535);
@@ -613,7 +598,7 @@ app.get(
 );
 
 // =====================================================
-// OGP共有ページ（クローラーにはOGPタグを渡し、ブラウザアクセス時のみ0.1秒後にTOPへ転送）
+// OGP共有ページ（Twitterbotはリダイレクトせず、一般ユーザーは300ms後にTOPへ転送）
 // =====================================================
 
 app.get(
@@ -669,6 +654,10 @@ app.get(
         `/` +
         encodeURIComponent(blocked) +
         `.png`;
+
+      // ユーザーエージェントからX（Twitter）のクローラーを判定
+      const userAgent = req.get("User-Agent") || "";
+      const isTwitterBot = /Twitterbot/i.test(userAgent);
 
       res.set(
         "Cache-Control",
@@ -764,16 +753,19 @@ Xブロックチェッカー - 結果
   content="${escapeHtml(imageUrl)}"
 />
 
-<!-- Twitterボット等のクローラーはJSを実行しないためOGPのみ読み取り、人間のユーザーブラウザのみ0.1秒(100ms)後にTOPへ遷移します -->
+${
+  !isTwitterBot ? `
+<!-- 一般ユーザーのみ0.3秒(300ms)後にTOPへ遷移 -->
 <script>
   setTimeout(function() {
     window.location.replace("/");
-  }, 100);
+  }, 300);
 </script>
-
 <noscript>
   <meta http-equiv="refresh" content="0;url=/">
 </noscript>
+` : ''
+}
 
 <style>
 
@@ -1315,4 +1307,44 @@ app.post(
         `ブロック数\n` +
         `${blocked.toLocaleString("ja-JP")}人`;
 
-      await send
+      try {
+        await sendTelegram(telegramText);
+      } catch (e) {
+        console.error("Telegram送信エラー:", e.message);
+      }
+
+      return res.json({
+        success: true,
+        username: profile.username,
+        followers: profile.followers,
+        blocked: blocked
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Check APIエラー:",
+        error.message
+      );
+
+      return res
+        .status(500)
+        .json({
+
+          success:false,
+
+          error:
+            error.code ||
+            error.message ||
+            "server_error"
+
+        });
+
+    }
+
+  }
+);
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
