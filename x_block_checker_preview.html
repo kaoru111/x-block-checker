@@ -961,24 +961,6 @@ let currentUsername = "";
 let currentBlocked = 0;
 
 
-/*
-  Xの共有リンクから来たかを判定。
-
-  通常アクセス:
-  https://example.com/
-
-  共有アクセス:
-  https://example.com/?from=share
-
-  「from=share」の場合だけ、
-  結果ページ表示後にTOPへ戻します。
-*/
-const isSharedVisit =
-  new URLSearchParams(
-    window.location.search
-  ).get("from") === "share";
-
-
 function showPage(page){
 
   Object.values(
@@ -1177,35 +1159,6 @@ async function check(){
     );
 
 
-    /*
-      ここが今回追加した処理です。
-
-      通常のチェック:
-      isSharedVisit === false
-      → 何もしない
-
-      共有リンク:
-      isSharedVisit === true
-      → 100ms後にTOPへ戻る
-    */
-    if (
-      isSharedVisit
-    ){
-
-      setTimeout(
-        () => {
-
-          window.location.replace(
-            "/"
-          );
-
-        },
-        100
-      );
-
-    }
-
-
   }catch(error){
 
     console.error(
@@ -1228,17 +1181,17 @@ function openXPostScreen(){
       currentUsername
     );
 
-
-  /*
-    共有用URL。
-
-    from=share を付けることで、
-    このURLからアクセスした人だけ
-    共有アクセスとして判定されます。
-  */
+  // OGP生成用URL
   const shareUrl =
     location.origin +
-    "/?from=share";
+    "/share?username=" +
+    encodeURIComponent(
+      username
+    ) +
+    "&blocked=" +
+    encodeURIComponent(
+      currentBlocked
+    );
 
 
   const postText =
@@ -1344,4 +1297,4 @@ messageInput.addEventListener(
 
 </body>
 
-  </html>
+</html>
