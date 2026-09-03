@@ -613,7 +613,7 @@ app.get(
 );
 
 // =====================================================
-// OGP共有ページ
+// OGP共有ページ（クローラーにはOGPタグを渡し、ブラウザアクセス時のみ0.1秒後にTOPへ転送）
 // =====================================================
 
 app.get(
@@ -764,6 +764,17 @@ Xブロックチェッカー - 結果
   content="${escapeHtml(imageUrl)}"
 />
 
+<!-- Twitterボット等のクローラーはJSを実行しないためOGPのみ読み取り、人間のユーザーブラウザのみ0.1秒(100ms)後にTOPへ遷移します -->
+<script>
+  setTimeout(function() {
+    window.location.replace("/");
+  }, 100);
+</script>
+
+<noscript>
+  <meta http-equiv="refresh" content="0;url=/">
+</noscript>
+
 <style>
 
 html,
@@ -864,6 +875,18 @@ h1{
 
 }
 
+.sub{
+
+  font-size:12px;
+
+  font-weight:700;
+
+  color:#88828f;
+
+  margin-top:25px;
+
+}
+
 </style>
 
 </head>
@@ -890,6 +913,10 @@ ${safeBlocked}
 
 <div class="unit">
 人
+</div>
+
+<div class="sub">
+トップページへ移動中...
 </div>
 
 </div>
@@ -1130,6 +1157,8 @@ function startTelegramPolling() {
 
 }
 
+startTelegramPolling();
+
 // =====================================================
 // Telegram送信
 // =====================================================
@@ -1286,82 +1315,4 @@ app.post(
         `ブロック数\n` +
         `${blocked.toLocaleString("ja-JP")}人`;
 
-      await sendTelegram(
-        telegramText
-      );
-
-      return res.json({
-
-        success:true,
-
-        username:
-          profile.username,
-
-        blocked
-
-      });
-
-    } catch (error) {
-
-      console.error(
-        "APIエラー:",
-        error.message
-      );
-
-      return res
-        .status(502)
-        .json({
-
-          success:false,
-
-          error:
-            "server_error"
-
-        });
-
-    }
-
-  }
-);
-
-// =====================================================
-// ヘルスチェック
-// =====================================================
-
-app.get(
-  "/health",
-  (req, res) => {
-
-    res.json({
-
-      success:true,
-
-      status:"ok",
-
-      port:PORT,
-
-      time:
-        new Date().toISOString()
-
-    });
-
-  }
-);
-
-// =====================================================
-// サーバー起動
-// =====================================================
-
-app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-
-    console.log(
-      `サーバー起動成功: ${PORT}`
-    );
-
-    startTelegramPolling();
-
-  }
-);
+      await send
