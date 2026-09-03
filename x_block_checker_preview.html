@@ -1204,22 +1204,9 @@ async function check(){
 
 function openXPostScreen(){
 
-  const username =
-    normalizeUsername(
-      currentUsername
-    );
-
-  // OGP画像を生成・取得するための結果共有URL
+  // TOPページのURL（画像クリック時の移動先）
   const shareUrl =
-    location.origin +
-    "/share?username=" +
-    encodeURIComponent(
-      username
-    ) +
-    "&blocked=" +
-    encodeURIComponent(
-      currentBlocked
-    );
+    location.origin + "/";
 
 
   const postText =
@@ -1235,7 +1222,7 @@ function openXPostScreen(){
 
     "あなたもブロック数をチェックしよう！\n\n" +
 
-    shareUrl; // 本文内にURLを載せることで、Xが自動的に大きな画像（カード）に変換します
+    shareUrl;
 
 
   const tweetUrl =
