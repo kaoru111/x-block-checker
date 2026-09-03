@@ -1204,9 +1204,22 @@ async function check(){
 
 function openXPostScreen(){
 
-  // 画像（カード）をクリックしたときに開く遷移先URL
+  const username =
+    normalizeUsername(
+      currentUsername
+    );
+
+  // OGP画像を生成・取得するための結果共有URL
   const shareUrl =
-    "https://x-block-checker.onrender.com/";
+    location.origin +
+    "/share?username=" +
+    encodeURIComponent(
+      username
+    ) +
+    "&blocked=" +
+    encodeURIComponent(
+      currentBlocked
+    );
 
 
   const postText =
@@ -1220,17 +1233,15 @@ function openXPostScreen(){
 
     "人\n\n" +
 
-    "あなたもブロック数をチェックしよう！\n";
+    "あなたもブロック数をチェックしよう！\n\n" +
+
+    shareUrl; // 本文内にURLを載せることで、Xが自動的に大きな画像（カード）に変換します
 
 
   const tweetUrl =
     "https://twitter.com/intent/tweet?text=" +
     encodeURIComponent(
       postText
-    ) +
-    "&url=" +
-    encodeURIComponent(
-      shareUrl
     );
 
 
