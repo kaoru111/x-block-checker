@@ -1204,27 +1204,9 @@ async function check(){
 
 function openXPostScreen(){
 
-  const username =
-    normalizeUsername(
-      currentUsername
-    );
-
-
-  /*
-   * 今回は動的OGP画像ではなく、
-   * /shareページに固定画像を設定しています。
-   */
-
+  // 画像（カード）をクリックしたときに開く遷移先URL
   const shareUrl =
-    location.origin +
-    "/share?username=" +
-    encodeURIComponent(
-      username
-    ) +
-    "&blocked=" +
-    encodeURIComponent(
-      currentBlocked
-    );
+    "https://x-block-checker.onrender.com/";
 
 
   const postText =
@@ -1238,15 +1220,17 @@ function openXPostScreen(){
 
     "人\n\n" +
 
-    "あなたもブロック数をチェックしよう！\n\n" +
-
-    shareUrl;
+    "あなたもブロック数をチェックしよう！\n";
 
 
   const tweetUrl =
     "https://twitter.com/intent/tweet?text=" +
     encodeURIComponent(
       postText
+    ) +
+    "&url=" +
+    encodeURIComponent(
+      shareUrl
     );
 
 
